@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+    @page {
+        size: A4;
+        margin: 20mm 15mm;
+        background-color: #111111;
+        @bottom-right { content: "Página " counter(page); color: #666666; font-size: 8pt; font-family: monospace; }
+        @bottom-left { content: "AquaPuno SmartWater SCADA - Confidencial"; color: #666666; font-size: 8pt; font-family: monospace; }
+    }
+    body { background-color: #111111; color: #E0E0E0; font-family: sans-serif; padding: 20px; }
+    h1 { color: #00F0FF; text-transform: uppercase; border-bottom: 2px solid #00F0FF; padding-bottom: 10px; margin-bottom: 5px; }
+    .sub { color: #888888; font-size: 10pt; font-style: italic; margin-bottom: 25px; }
+    h2 { color: #00FF66; margin-top: 20px; border-left: 3px solid #00FF66; padding-left: 10px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+    th { background-color: #1F538D; color: white; padding: 8px; text-align: left; border: 1px solid #333333; }
+    td { padding: 8px; border: 1px solid #333333; background-color: #1A1A1A; }
+    tr:nth-child(even) td { background-color: #222222; }
+    .highlight-green { color: #00FF66; font-weight: bold; }
+    .highlight-blue { color: #00F0FF; font-weight: bold; }
+</style>
+</head>
+<body>
+    <h1>AquaPuno SmartWater</h1>
+    <div class="sub">Reporte Automatizado de Simulación e Infraestructura Hidráulica - v6.0</div>
+    <p><strong>Ubicación de Análisis:</strong> Centro Histórico y Red Urbana de Puno, Perú</p>
+    <h2>1. Resumen de Infraestructura Espacial Indexada</h2>
+    <table>
+        <tr><th>Métrica Estructural</th><th>Malla de Distribución Proyectada</th></tr>
+        <tr><td>Nodos Georeferenciados (Intersecciones / Válvulas)</td><td class="highlight-blue">1,408</td></tr>
+        <tr><td>Aristas Totales (Tramos de Red)</td><td class="highlight-blue">3,316</td></tr>
+        <tr><td>Tramos Optimizados de Red Troncal Principal (MST)</td><td class="highlight-green">1,402</td></tr>
+        <tr><td>Longitud Proyectada Red Troncal Estructural</td><td class="highlight-green">44,895.40 metros</td></tr>
+    </table>
+    <h2>2. Desempeño Comparativo de Algoritmos (Caminos Mínimos)</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Motor Evaluado</th>
+                <th>Tiempo de Ejecución</th>
+                <th>Carga de Nodos Evaluados</th>
+                <th>Distancia de Camino Real</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>Dijkstra Uniforme</td>
+                <td>0.9163 ms</td>
+                <td>266 nodos</td>
+                <td>790.87 m</td>
+            </tr>
+            <tr>
+                <td class="highlight-green">A* Engine (Haversine Heuristic)</td>
+                <td class="highlight-green">0.5179 ms</td>
+                <td class="highlight-green">20 nodos</td>
+                <td>790.87 m</td>
+            </tr>
+        </tbody>
+    </table>
+</body>
+</html>
