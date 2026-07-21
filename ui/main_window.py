@@ -778,88 +778,97 @@ class MainWindow(ctk.CTk):
             self._run_mst_logic()
 
     def toggle_leak_simulation(self):
+        print("[DEBUG] toggle_leak_simulation INICIO")
         self.write_scada_log("DEBUG: toggle_leak_simulation INICIO")
-        try:
-            print("[DEBUG] toggle_leak_simulation INICIO")
-            if not self.spatial_graph:
-                self.write_scada_log("No hay grafo cargado.")
-                return
+        if not self.spatial_graph:
+            print("[DEBUG] No hay grafo cargado")
+            self.write_scada_log("No hay grafo cargado.")
+            return
 
-            if self.leak_active:
-                print("[DEBUG] Desactivando fuga")
-                self.leak_active = False
-                self.leak_red_nodes = []
-                self.leak_orange_nodes = []
-                self.leak_response_routes = []
-                self.leak_reroute = []
-                self.valves_to_close = []
-                self.btn_leak.configure(text="Simular Ruptura", fg_color="#B71C1C", hover_color="#7F0000")
-                if self.map_widget:
-                    self._refresh_map_view()
-                self.write_scada_log("Simulación de ruptura DESACTIVADA. Vista normal.")
-            else:
-                node_ids = list(self.spatial_graph.nodes.keys())
-                if len(node_ids) < 5:
-                    self.write_scada_log("No hay suficientes nodos para simular ruptura.")
-                    return
-
-                reservoir_ids = list(self.spatial_graph.reservoir_nodes)
-                if not reservoir_ids:
-                    self.write_scada_log("No hay reservorios definidos en el grafo.")
-                    return
-
-                reservoir_id = random.choice(reservoir_ids)
-                reservoir_node = self.spatial_graph.nodes[reservoir_id]
-                cx, cy = reservoir_node.x, reservoir_node.y
-                sector_map = getattr(self.spatial_graph, 'sector_map', {})
-                sector_nodes = {nid for nid, rid in sector_map.items() if rid == reservoir_id}
-
-                def _bfs(limit_sector=True):
-                    q = __import__('collections').deque([(reservoir_id, 0)])
-                    visited = {reservoir_id}
-                    out = []
-                    while q:
-                        nid, depth = q.popleft()
-                        if depth > 0:
-                            out.append(nid)
-                        if depth >= 5:
-                            continue
-                        for edge in self.spatial_graph.adjacency_list.get(nid, []):
-                            neighbor = edge.target
-                            if neighbor in visited:
-                                continue
-                            if limit_sector and neighbor not in sector_nodes:
-                                continue
-                            visited.add(neighbor)
-                            q.append((neighbor, depth + 1))
-                    return [nid for nid in out if not self.spatial_graph.is_reservoir(nid)]
-
-                nearby_connected = _bfs(True)
-                if len(nearby_connected) < 2:
-                    nearby_connected = _bfs(False)
-
-                if len(nearby_connected) < 2:
-                    self.write_scada_log("No hay suficientes nodos conectados cercanos al reservorio seleccionado.")
-                    return
-                nearby_connected.sort(key=lambda nid: math.hypot(self.spatial_graph.nodes[nid].x - cx, self.spatial_graph.nodes[nid].y - cy))
-                close_nodes = nearby_connected[:len(nearby_connected)//2]
-                far_nodes = nearby_connected[len(nearby_connected)//2:]
-                self.leak_orange_nodes = close_nodes[:max(4, len(close_nodes)//2)]
-                self.leak_red_nodes = far_nodes[:max(3, len(far_nodes)//2)]
-                self.leak_active = True
-                self.btn_leak.configure(text="Desactivar Ruptura", fg_color="#FF9800", hover_color="#E65100")
-                self.write_scada_log("=== SIMULACIÓN DE RUPTURA ACTIVADA ===")
-                self.write_scada_log(f"Reservorio asociado: {reservoir_id}")
-                self.write_scada_log(f"Nodos en ruptura crítica (ROJO): {len(self.leak_red_nodes)}")
-                self.write_scada_log(f"Nodos en ruptura media (NARANJA): {len(self.leak_orange_nodes)}")
+        if self.leak_active:
+            print("[DEBUG] Desactivando fuga")
+            self.leak_active = False
+            self.leak_red_nodes = []
+            self.leak_orange_nodes = []
+            self.leak_response_routes = []
+            self.leak_reroute = []
+            self.valves_to_close = []
+            self.btn_leak.configure(text="Simular Ruptura", fg_color="#B71C1C", hover_color="#7F0000")
+            if self.map_widget:
                 self._refresh_map_view()
+            self.write_scada_log("Simulación de ruptura DESACTIVADA. Vista normal.")
+            print("[DEBUG] toggle_leak_simulation FIN DESACTIVAR")
+            return
 
-            print("[DEBUG] toggle_leak_simulation FIN")
-        except Exception as e:
-            print(f"[DEBUG] ERROR toggle_leak_simulation: {e}")
-            self.write_scada_log(f"ERROR en simulación de ruptura: {e}")
-            import traceback
-            traceback.print_exc()
+        node_ids = list(self.spatial_graph.nodes.keys())
+        print(f"[DEBUG] node_ids={len(node_ids)}")
+        if len(node_ids) < 5:
+            print("[DEBUG] Menos de 5 nodos, abortando")
+            self.write_scada_log("No hay suficientes nodos para simular ruptura.")
+            return
+
+        reservoir_ids = list(self.spatial_graph.reservoir_nodes)
+        print(f"[DEBUG] reservoir_ids={reservoir_ids}")
+        if not reservoir_ids:
+            print("[DEBUG] No hay reservorios")
+            self.write_scada_log("No hay reservorios definidos en el grafo.")
+            return
+
+        reservoir_id = random.choice(reservoir_ids)
+        print(f"[DEBUG] reservoir_id={reservoir_id}")
+        reservoir_node = self.spatial_graph.nodes[reservoir_id]
+        cx, cy = reservoir_node.x, reservoir_node.y
+        sector_map = getattr(self.spatial_graph, 'sector_map', {})
+        sector_nodes = {nid for nid, rid in sector_map.items() if rid == reservoir_id}
+        print(f"[DEBUG] sector_nodes={len(sector_nodes)}")
+
+        def _bfs(limit_sector=True):
+            q = __import__('collections').deque([(reservoir_id, 0)])
+            visited = {reservoir_id}
+            out = []
+            while q:
+                nid, depth = q.popleft()
+                if depth > 0:
+                    out.append(nid)
+                if depth >= 5:
+                    continue
+                for edge in self.spatial_graph.adjacency_list.get(nid, []):
+                    neighbor = edge.target
+                    if neighbor in visited:
+                        continue
+                    if limit_sector and neighbor not in sector_nodes:
+                        continue
+                    visited.add(neighbor)
+                    q.append((neighbor, depth + 1))
+            return [nid for nid in out if not self.spatial_graph.is_reservoir(nid)]
+
+        nearby_connected = _bfs(True)
+        print(f"[DEBUG] BFS sector={len(nearby_connected)}")
+        if len(nearby_connected) < 2:
+            nearby_connected = _bfs(False)
+            print(f"[DEBUG] BFS global fallback={len(nearby_connected)}")
+
+        if len(nearby_connected) < 2:
+            print("[DEBUG] nearby_connected < 2, abortando")
+            self.write_scada_log("No hay suficientes nodos conectados cercanos al reservorio seleccionado.")
+            return
+
+        nearby_connected.sort(key=lambda nid: math.hypot(self.spatial_graph.nodes[nid].x - cx, self.spatial_graph.nodes[nid].y - cy))
+        close_nodes = nearby_connected[:len(nearby_connected)//2]
+        far_nodes = nearby_connected[len(nearby_connected)//2:]
+        self.leak_orange_nodes = close_nodes[:max(4, len(close_nodes)//2)]
+        self.leak_red_nodes = far_nodes[:max(3, len(far_nodes)//2)]
+        print(f"[DEBUG] leak_orange_nodes={len(self.leak_orange_nodes)}, leak_red_nodes={len(self.leak_red_nodes)}")
+
+        self.leak_active = True
+        self.btn_leak.configure(text="Desactivar Ruptura", fg_color="#FF9800", hover_color="#E65100")
+        self.write_scada_log("=== SIMULACIÓN DE RUPTURA ACTIVADA ===")
+        self.write_scada_log(f"Reservorio asociado: {reservoir_id}")
+        self.write_scada_log(f"Nodos en ruptura crítica (ROJO): {len(self.leak_red_nodes)}")
+        self.write_scada_log(f"Nodos en ruptura media (NARANJA): {len(self.leak_orange_nodes)}")
+        print("[DEBUG] Refrescando mapa...")
+        self._refresh_map_view()
+        print("[DEBUG] toggle_leak_simulation FIN OK")
 
     def export_scada_pdf_report(self):
         try:
