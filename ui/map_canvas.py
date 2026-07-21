@@ -51,6 +51,7 @@ class MapCanvasWidget(ctk.CTkFrame):
         self._mst_scatter = None
         self._path_collections = []
         self._leak_artists = []
+        self._sector_artists = []
 
     def set_node_selection_callback(self, callback):
         """Establecer el callback que se ejecuta cuando se selecciona un nodo"""
@@ -206,6 +207,9 @@ class MapCanvasWidget(ctk.CTkFrame):
                         zorder=5,
                         label="Reservorios"
                     )
+            
+            if hasattr(graph, 'sector_map') and graph.sector_map:
+                self._draw_sectors(graph)
 
             self.ax.set_title("Malla de Infraestructura Hidráulica - Puno", color="white", fontsize=10, pad=10)
             
@@ -478,3 +482,43 @@ class MapCanvasWidget(ctk.CTkFrame):
             self._mst_scatter = None
         self._clear_artists(self._path_collections)
         self._clear_artists(self._leak_artists)
+        self._clear_artists(self._sector_artists)
+
+    def _draw_sectors(self, graph: GeoGraph):
+        sector_colors = {
+            "red": "#FF4444",
+            "green": "#44FF44",
+            "blue": "#4488FF",
+            "yellow": "#FFFF44",
+            "magenta": "#FF44FF",
+            "cyan": "#44FFFF",
+            "orange": "#FF8844",
+            "purple": "#8844FF",
+            "white": "#FFFFFF",
+            "lime": "#88FF44",
+        }
+        palette = list(sector_colors.values())
+        reservoir_ids = list(getattr(graph, 'reservoir_nodes', []))
+        sector_map = getattr(graph, 'sector_map', {})
+        if not reservoir_ids or not sector_map:
+            return
+        
+        for idx, rid in enumerate(reservoir_ids):
+            color = palette[idx % len(palette)]
+            node_ids = [nid for nid, assigned_rid in sector_map.items() if assigned_rid == rid]
+            if not node_ids:
+                continue
+            lons = [graph.nodes[nid].x for nid in node_ids if nid in graph.nodes]
+            lats = [graph.nodes[nid].y for nid in node_ids if nid in graph.nodes]
+            if lons:
+                scatter = self.ax.scatter(
+                    lons,
+                    lats,
+                    color=color,
+                    s=18,
+                    marker="o",
+                    alpha=0.55,
+                    zorder=3,
+                    label=f"Sector {rid}",
+                )
+                self._sector_artists.append(scatter)

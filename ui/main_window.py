@@ -525,9 +525,13 @@ class MainWindow(ctk.CTk):
             self.write_scada_log("=== CONTROL DE FLUJO AUTOMÁTICO (modo fuga) ===")
         else:
             reservoir_id = random.choice(reservoir_ids)
-            safe_nodes = [nid for nid in self.spatial_graph.nodes.keys() if not self.spatial_graph.is_reservoir(nid)]
-            random.shuffle(safe_nodes)
-            targets = safe_nodes[:3]
+            sector_nodes = self.spatial_graph.get_sector_nodes(reservoir_id)
+            sector_candidates = [nid for nid in sector_nodes if nid != reservoir_id]
+            if not sector_candidates:
+                self.write_scada_log("No hay nodos de demanda en el sector del reservorio.")
+                return
+            random.shuffle(sector_candidates)
+            targets = sector_candidates[:3]
             self.write_scada_log("=== CONTROL DE FLUJO AUTOMÁTICO ===")
 
         self.valves_textbox.delete("0.0", "end")
@@ -567,6 +571,8 @@ class MainWindow(ctk.CTk):
                     for cid in close_valves:
                         self.valves_textbox.insert(ctk.END, f"    [CERRAR] Válvula {cid}\n")
                     self.valves_textbox.insert(ctk.END, "\n")
+            else:
+                self.write_scada_log(f"Ruta {idx} -> {target}: NO ALCANZABLE")
 
         self.valves_textbox.insert(ctk.END, "="*40 + "\n")
         self.valves_textbox.insert(ctk.END, "RECOMENDACIÓN SCADA:\n")
@@ -587,13 +593,14 @@ class MainWindow(ctk.CTk):
             return
 
         reservoir_id = random.choice(reservoir_ids)
-        safe_nodes = [nid for nid in self.spatial_graph.nodes.keys() if not self.spatial_graph.is_reservoir(nid)]
-        if not safe_nodes:
-            self.write_scada_log("No hay nodos de demanda disponibles.")
+        sector_nodes = self.spatial_graph.get_sector_nodes(reservoir_id)
+        sector_candidates = [nid for nid in sector_nodes if nid != reservoir_id and not self.spatial_graph.is_reservoir(nid)]
+        if not sector_candidates:
+            self.write_scada_log("No hay nodos de demanda en el sector del reservorio.")
             return
 
-        random.shuffle(safe_nodes)
-        targets = safe_nodes[:2]
+        random.shuffle(sector_candidates)
+        targets = sector_candidates[:2]
 
         self.valves_textbox.delete("0.0", "end")
         self.valves_textbox.insert(ctk.END, f"Origen: {reservoir_id}\n")

@@ -7,18 +7,15 @@ from ui.main_window import MainWindow
 from utils.logger import logger
 
 def start_scada_application():
-    # 1. Instanciar el contenedor del grafo espacial
     spatial_graph = GeoGraph()
     puno_center_bbox = (-15.8450, -70.0350, -15.8320, -70.0200)
     
-    # 2. Descargar y poblar la topología urbana de Puno
     osm_client = OverpassClient()
     raw_osm_data = osm_client.fetch_puno_roads(puno_center_bbox)
     
     if raw_osm_data:
         MapTransformer.populate_graph_from_osm(raw_osm_data, spatial_graph)
     
-    # 3. Asignar 17 reservorios en posiciones estratégicas distribuidas por toda la ciudad
     node_ids = list(spatial_graph.nodes.keys())
     if len(node_ids) >= 17:
         xs = [spatial_graph.nodes[nid].x for nid in node_ids]
@@ -55,17 +52,70 @@ def start_scada_application():
 
         spatial_graph.set_reservoirs(reservoir_ids)
         logger.info(f"✓ Se asignaron {len(reservoir_ids)} reservorios estratégicos en cuadrícula {cols}x{rows}")
+        
+        spatial_graph.assign_sectors()
+        spatial_graph.isolate_sectors()
+        
+        trunk_graph = spatial_graph.get_trunk_graph()
+        
+        try:
+            import json
+            import os
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            
+            sector_payload = {
+                "reservoir_nodes": spatial_graph.reservoir_nodes,
+                "sector_count": len(spatial_graph.sector_graphs),
+                "sectors": {}
+            }
+            for rid, sg in spatial_graph.sector_graphs.items():
+                sector_payload["sectors"][rid] = {
+                    "nodes": list(sg.nodes.keys()),
+                    "edges": []
+                }
+                for nid, edges in sg.adjacency_list.items():
+                    for edge in edges:
+                        sector_payload["sectors"][rid]["edges"].append({
+                            "source": edge.source,
+                            "target": edge.target,
+                            "length": edge.length,
+                            "name": edge.name,
+                        })
+            
+            trunk_payload = {
+                "reservoir_nodes": trunk_graph.reservoir_nodes,
+                "nodes": {nid: {"x": node.x, "y": node.y, "elevation": node.elevation} for nid, node in trunk_graph.nodes.items()},
+                "edges": []
+            }
+            for nid, edges in trunk_graph.adjacency_list.items():
+                for edge in edges:
+                    trunk_payload["edges"].append({
+                        "source": edge.source,
+                        "target": edge.target,
+                        "length": edge.length,
+                        "name": edge.name,
+                    })
+            
+            with open(os.path.join(base_dir, "sectorized_network.json"), "w", encoding="utf-8") as f:
+                json.dump(sector_payload, f, indent=2, ensure_ascii=False)
+            
+            with open(os.path.join(base_dir, "trunk_network.json"), "w", encoding="utf-8") as f:
+                json.dump(trunk_payload, f, indent=2, ensure_ascii=False)
+            
+            logger.info("Modelo sectorizado y troncal guardados en disco.")
+        except Exception as e:
+            logger.warning(f"No se pudo guardar el modelo sectorizado: {e}")
+        
+        logger.info(f"Red troncal sectorizada lista. Sectores: {len(spatial_graph.sector_graphs)}, "
+                    f"Nodos troncal: {len(trunk_graph.nodes)}, Aristas troncal: {sum(len(v) for v in trunk_graph.adjacency_list.values())}")
     else:
         logger.warning(f"Solo se encontraron {len(node_ids)} nodos, se esperaban al menos 17 reservorios")
+        if node_ids:
+            spatial_graph.set_reservoirs(node_ids[:max(1, len(node_ids)//10)])
     
-    # =====================================================================
-    # NUEVO: Asignar presión aleatoria ideal (15 a 50 mca) a todos los nodos
-    # =====================================================================
     for node_obj in spatial_graph.nodes.values():
         node_obj.pressure_mca = round(random.uniform(15.0, 50.0), 2)
-    # =====================================================================
     
-    # 4. Inicializar la interfaz pasando el grafo como argumento
     app = MainWindow(spatial_graph)
     
     app.mainloop()

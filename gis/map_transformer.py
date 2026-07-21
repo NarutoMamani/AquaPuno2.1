@@ -74,4 +74,6 @@ class MapTransformer:
 
         v_nodes, v_edges = graph.get_summary()
         logger.info(f"Transformación GIS Finalizada. Grafo Topológico Poblado -> Nodos: {v_nodes}, Aristas Totales: {v_edges}")
+        
+        graph.assign_sectors()
         return True
