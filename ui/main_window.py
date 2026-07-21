@@ -32,7 +32,8 @@ class MainWindow(ctk.CTk):
         self._leak_cy = None
         self._leak_radius = None
         self._is_running = True
-        self.after_ids = []  # Rastrear IDs de callbacks para limpiarlos al cerrar
+        self.after_ids = []
+        self.awaiting_leak_reservoir = False
         
         # Inicializar cliente de Nominatim para obtener direcciones
         self.nominatim_client = NominatimClient()
@@ -330,9 +331,17 @@ class MainWindow(ctk.CTk):
                 pass
 
     def on_node_selected(self, node_id: str, node, sensor_data):
-        """Mostrar información del nodo seleccionado o limpiar si node_id es None"""
+        """Mostrar información del nodo seleccionado o ejecutar ruptura si estamos en modo espera."""
+        if getattr(self, 'awaiting_leak_reservoir', False):
+            self.awaiting_leak_reservoir = False
+            self.btn_leak.configure(text="Simular Ruptura", fg_color="#B71C1C", hover_color="#7F0000")
+            if node_id is None or not self.spatial_graph.is_reservoir(node_id):
+                self.write_scada_log("Selección cancelada o no es un reservorio.")
+                return
+            self._run_leak_for_sector(node_id)
+            return
+        
         if node_id is None:
-            # Deseleccionar: limpiar toda la información
             self.label_node_id.configure(text="ID: --")
             self.label_node_coords.configure(text="Coords: --")
             self.label_node_elevation.configure(text="Elevación: --")
@@ -344,18 +353,15 @@ class MainWindow(ctk.CTk):
             self.write_scada_log("Deseleccionado")
             return
         
-        # Mostrar información inmediata del nodo
         self.label_node_id.configure(text=f"ID: {node_id}")
         self.label_node_coords.configure(text=f"Coords: ({node.x:.6f}, {node.y:.6f})")
         self.label_node_elevation.configure(text=f"Elevación: {node.elevation:.2f} m")
         
-        # Mostrar tipo de nodo (Reservorio o Normal)
         if self.spatial_graph.is_reservoir(node_id):
             self.label_node_type.configure(text="Tipo: 🌊 RESERVORIO (EMSAPUNO)", text_color="#00E5FF")
         else:
             self.label_node_type.configure(text="Tipo: Nodo de Distribución", text_color="#FFFFFF")
         
-        # Mostrar información del sensor
         if sensor_data and node_id in sensor_data:
             data = sensor_data[node_id]
             presion = data.get("presion", "--")
@@ -363,7 +369,6 @@ class MainWindow(ctk.CTk):
             estado = data.get("estado", "--")
             
             if presion is not None:
-                # CAMBIADO DE PSI A MCA PARA ESTANDARIZAR
                 self.label_node_pressure.configure(text=f"Presión: {presion} mca")
             else:
                 self.label_node_pressure.configure(text="Presión: --")
@@ -380,10 +385,8 @@ class MainWindow(ctk.CTk):
             self.label_node_flow.configure(text="Caudal: --")
             self.label_node_estado.configure(text="Estado: --")
         
-        # Mostrar "Cargando..." mientras se obtiene la dirección
         self.label_node_location.configure(text="📍 Ubicación: Cargando...")
         
-        # Obtener dirección en un hilo separado para no bloquear la UI
         thread = threading.Thread(
             target=self._fetch_and_display_address,
             args=(node_id, node),
@@ -392,6 +395,62 @@ class MainWindow(ctk.CTk):
         thread.start()
         
         self.write_scada_log(f"✓ Nodo seleccionado: {node_id}")
+
+    def _get_sector_reservoir_nodes(self, reservoir_id):
+        sector_map = getattr(self.spatial_graph, 'sector_map', {})
+        sector_nodes = {nid for nid, rid in sector_map.items() if rid == reservoir_id}
+        if reservoir_id in self.spatial_graph.nodes:
+            sector_nodes.add(reservoir_id)
+        return sector_nodes
+
+    def _run_leak_for_sector(self, reservoir_id):
+        reservoir_node = self.spatial_graph.nodes[reservoir_id]
+        cx, cy = reservoir_node.x, reservoir_node.y
+        sector_nodes = self._get_sector_reservoir_nodes(reservoir_id)
+
+        q = __import__('collections').deque([(reservoir_id, 0)])
+        visited = {reservoir_id}
+        nearby_connected = []
+        while q:
+            nid, depth = q.popleft()
+            if depth > 0:
+                nearby_connected.append(nid)
+            if depth >= 5:
+                continue
+            for edge in self.spatial_graph.adjacency_list.get(nid, []):
+                neighbor = edge.target
+                if neighbor in visited or neighbor not in sector_nodes:
+                    continue
+                visited.add(neighbor)
+                q.append((neighbor, depth + 1))
+
+        nearby_connected = [nid for nid in nearby_connected if not self.spatial_graph.is_reservoir(nid)]
+
+        if len(nearby_connected) < 2:
+            self.write_scada_log("Ese sector no tiene suficientes nodos para simular ruptura.")
+            self.leak_active = False
+            self.leak_red_nodes = []
+            self.leak_orange_nodes = []
+            self.leak_response_routes = []
+            self.leak_reroute = []
+            self.valves_to_close = []
+            self.btn_leak.configure(text="Simular Ruptura", fg_color="#B71C1C", hover_color="#7F0000")
+            if self.map_widget:
+                self._refresh_map_view()
+            return
+
+        nearby_connected.sort(key=lambda nid: math.hypot(self.spatial_graph.nodes[nid].x - cx, self.spatial_graph.nodes[nid].y - cy))
+        close_nodes = nearby_connected[:len(nearby_connected)//2]
+        far_nodes = nearby_connected[len(nearby_connected)//2:]
+        self.leak_orange_nodes = close_nodes[:max(4, len(close_nodes)//2)]
+        self.leak_red_nodes = far_nodes[:max(3, len(far_nodes)//2)]
+        self.leak_active = True
+        self.btn_leak.configure(text="Desactivar Ruptura", fg_color="#FF9800", hover_color="#E65100")
+        self.write_scada_log("=== SIMULACIÓN DE RUPTURA ACTIVADA ===")
+        self.write_scada_log(f"Reservorio asociado: {reservoir_id}")
+        self.write_scada_log(f"Nodos en ruptura crítica (ROJO): {len(self.leak_red_nodes)}")
+        self.write_scada_log(f"Nodos en ruptura media (NARANJA): {len(self.leak_orange_nodes)}")
+        self._refresh_map_view()
 
     def _fetch_and_display_address(self, node_id: str, node):
         """Obtener dirección desde Nominatim en hilo separado"""
@@ -778,97 +837,23 @@ class MainWindow(ctk.CTk):
             self._run_mst_logic()
 
     def toggle_leak_simulation(self):
-        print("[DEBUG] toggle_leak_simulation INICIO")
-        self.write_scada_log("DEBUG: toggle_leak_simulation INICIO")
-        if not self.spatial_graph:
-            print("[DEBUG] No hay grafo cargado")
-            self.write_scada_log("No hay grafo cargado.")
-            return
-
         if self.leak_active:
-            print("[DEBUG] Desactivando fuga")
             self.leak_active = False
             self.leak_red_nodes = []
             self.leak_orange_nodes = []
             self.leak_response_routes = []
             self.leak_reroute = []
             self.valves_to_close = []
+            self.awaiting_leak_reservoir = False
             self.btn_leak.configure(text="Simular Ruptura", fg_color="#B71C1C", hover_color="#7F0000")
             if self.map_widget:
                 self._refresh_map_view()
             self.write_scada_log("Simulación de ruptura DESACTIVADA. Vista normal.")
-            print("[DEBUG] toggle_leak_simulation FIN DESACTIVAR")
             return
 
-        node_ids = list(self.spatial_graph.nodes.keys())
-        print(f"[DEBUG] node_ids={len(node_ids)}")
-        if len(node_ids) < 5:
-            print("[DEBUG] Menos de 5 nodos, abortando")
-            self.write_scada_log("No hay suficientes nodos para simular ruptura.")
-            return
-
-        reservoir_ids = list(self.spatial_graph.reservoir_nodes)
-        print(f"[DEBUG] reservoir_ids={reservoir_ids}")
-        if not reservoir_ids:
-            print("[DEBUG] No hay reservorios")
-            self.write_scada_log("No hay reservorios definidos en el grafo.")
-            return
-
-        reservoir_id = random.choice(reservoir_ids)
-        print(f"[DEBUG] reservoir_id={reservoir_id}")
-        reservoir_node = self.spatial_graph.nodes[reservoir_id]
-        cx, cy = reservoir_node.x, reservoir_node.y
-        sector_map = getattr(self.spatial_graph, 'sector_map', {})
-        sector_nodes = {nid for nid, rid in sector_map.items() if rid == reservoir_id}
-        print(f"[DEBUG] sector_nodes={len(sector_nodes)}")
-
-        def _bfs(limit_sector=True):
-            q = __import__('collections').deque([(reservoir_id, 0)])
-            visited = {reservoir_id}
-            out = []
-            while q:
-                nid, depth = q.popleft()
-                if depth > 0:
-                    out.append(nid)
-                if depth >= 5:
-                    continue
-                for edge in self.spatial_graph.adjacency_list.get(nid, []):
-                    neighbor = edge.target
-                    if neighbor in visited:
-                        continue
-                    if limit_sector and neighbor not in sector_nodes:
-                        continue
-                    visited.add(neighbor)
-                    q.append((neighbor, depth + 1))
-            return [nid for nid in out if not self.spatial_graph.is_reservoir(nid)]
-
-        nearby_connected = _bfs(True)
-        print(f"[DEBUG] BFS sector={len(nearby_connected)}")
-        if len(nearby_connected) < 2:
-            nearby_connected = _bfs(False)
-            print(f"[DEBUG] BFS global fallback={len(nearby_connected)}")
-
-        if len(nearby_connected) < 2:
-            print("[DEBUG] nearby_connected < 2, abortando")
-            self.write_scada_log("No hay suficientes nodos conectados cercanos al reservorio seleccionado.")
-            return
-
-        nearby_connected.sort(key=lambda nid: math.hypot(self.spatial_graph.nodes[nid].x - cx, self.spatial_graph.nodes[nid].y - cy))
-        close_nodes = nearby_connected[:len(nearby_connected)//2]
-        far_nodes = nearby_connected[len(nearby_connected)//2:]
-        self.leak_orange_nodes = close_nodes[:max(4, len(close_nodes)//2)]
-        self.leak_red_nodes = far_nodes[:max(3, len(far_nodes)//2)]
-        print(f"[DEBUG] leak_orange_nodes={len(self.leak_orange_nodes)}, leak_red_nodes={len(self.leak_red_nodes)}")
-
-        self.leak_active = True
-        self.btn_leak.configure(text="Desactivar Ruptura", fg_color="#FF9800", hover_color="#E65100")
-        self.write_scada_log("=== SIMULACIÓN DE RUPTURA ACTIVADA ===")
-        self.write_scada_log(f"Reservorio asociado: {reservoir_id}")
-        self.write_scada_log(f"Nodos en ruptura crítica (ROJO): {len(self.leak_red_nodes)}")
-        self.write_scada_log(f"Nodos en ruptura media (NARANJA): {len(self.leak_orange_nodes)}")
-        print("[DEBUG] Refrescando mapa...")
-        self._refresh_map_view()
-        print("[DEBUG] toggle_leak_simulation FIN OK")
+        self.awaiting_leak_reservoir = True
+        self.write_scada_log("Seleccione un reservorio en el mapa para simular la ruptura en su sector.")
+        self.btn_leak.configure(text="Esperando reservorio...", fg_color="#E65100", hover_color="#BF360C")
 
     def export_scada_pdf_report(self):
         try:
