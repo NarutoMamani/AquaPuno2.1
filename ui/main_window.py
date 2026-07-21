@@ -415,7 +415,7 @@ class MainWindow(ctk.CTk):
             nid, depth = q.popleft()
             if depth > 0:
                 nearby_connected.append(nid)
-            if depth >= 5:
+            if depth >= 8:
                 continue
             for edge in self.spatial_graph.adjacency_list.get(nid, []):
                 neighbor = edge.target
@@ -426,8 +426,8 @@ class MainWindow(ctk.CTk):
 
         nearby_connected = [nid for nid in nearby_connected if not self.spatial_graph.is_reservoir(nid)]
 
-        if len(nearby_connected) < 2:
-            self.write_scada_log("Ese sector no tiene suficientes nodos para simular ruptura.")
+        if not nearby_connected:
+            self.write_scada_log("Ese sector no tiene nodos disponibles para simular ruptura.")
             self.leak_active = False
             self.leak_red_nodes = []
             self.leak_orange_nodes = []
@@ -440,10 +440,10 @@ class MainWindow(ctk.CTk):
             return
 
         nearby_connected.sort(key=lambda nid: math.hypot(self.spatial_graph.nodes[nid].x - cx, self.spatial_graph.nodes[nid].y - cy))
-        close_nodes = nearby_connected[:len(nearby_connected)//2]
-        far_nodes = nearby_connected[len(nearby_connected)//2:]
-        self.leak_orange_nodes = close_nodes[:max(4, len(close_nodes)//2)]
-        self.leak_red_nodes = far_nodes[:max(3, len(far_nodes)//2)]
+        close_nodes = nearby_connected[:max(1, len(nearby_connected)//2)]
+        far_nodes = nearby_connected[max(1, len(nearby_connected)//2):]
+        self.leak_orange_nodes = close_nodes[:max(1, len(close_nodes))]
+        self.leak_red_nodes = far_nodes[:max(1, len(far_nodes))]
         self.leak_active = True
         self.btn_leak.configure(text="Desactivar Ruptura", fg_color="#FF9800", hover_color="#E65100")
         self.write_scada_log("=== SIMULACIÓN DE RUPTURA ACTIVADA ===")
