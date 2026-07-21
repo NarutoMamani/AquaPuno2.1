@@ -814,27 +814,23 @@ class MainWindow(ctk.CTk):
                 sector_map = getattr(self.spatial_graph, 'sector_map', {})
                 sector_nodes = {nid for nid, rid in sector_map.items() if rid == reservoir_id}
 
-                xs = [self.spatial_graph.nodes[nid].x for nid in node_ids]
-                ys = [self.spatial_graph.nodes[nid].y for nid in node_ids]
-                min_x, max_x = min(xs), max(xs)
-                min_y, max_y = min(ys), max(ys)
-                range_x = max_x - min_x
-                range_y = max_y - min_y
-                max_range = max(range_x, range_y)
-                radius = max_range * 0.35
                 queue = __import__('collections').deque([(reservoir_id, 0)])
                 visited = {reservoir_id}
                 nearby_connected = []
+                depth_map = {}
+
                 while queue:
                     nid, depth = queue.popleft()
                     if depth > 0:
-                        if math.hypot(self.spatial_graph.nodes[nid].x - cx, self.spatial_graph.nodes[nid].y - cy) <= radius:
-                            nearby_connected.append(nid)
+                        nearby_connected.append(nid)
+                        depth_map[nid] = depth
                     if depth >= 5:
                         continue
                     for edge in self.spatial_graph.adjacency_list.get(nid, []):
                         neighbor = edge.target
-                        if neighbor in visited or (sector_nodes and neighbor not in sector_nodes):
+                        if neighbor in visited:
+                            continue
+                        if sector_nodes and neighbor not in sector_nodes:
                             continue
                         visited.add(neighbor)
                         queue.append((neighbor, depth + 1))
