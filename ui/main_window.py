@@ -814,30 +814,31 @@ class MainWindow(ctk.CTk):
                 sector_map = getattr(self.spatial_graph, 'sector_map', {})
                 sector_nodes = {nid for nid, rid in sector_map.items() if rid == reservoir_id}
 
-                queue = __import__('collections').deque([(reservoir_id, 0)])
-                visited = {reservoir_id}
-                nearby_connected = []
-                depth_map = {}
-
-                while queue:
-                    nid, depth = queue.popleft()
-                    if depth > 0:
-                        nearby_connected.append(nid)
-                        depth_map[nid] = depth
-                    if depth >= 5:
-                        continue
-                    for edge in self.spatial_graph.adjacency_list.get(nid, []):
-                        neighbor = edge.target
-                        if neighbor in visited:
+                def _bfs(limit_sector=True):
+                    q = __import__('collections').deque([(reservoir_id, 0)])
+                    visited = {reservoir_id}
+                    out = []
+                    while q:
+                        nid, depth = q.popleft()
+                        if depth > 0:
+                            out.append(nid)
+                        if depth >= 5:
                             continue
-                        if sector_nodes and neighbor not in sector_nodes:
-                            continue
-                        visited.add(neighbor)
-                        queue.append((neighbor, depth + 1))
+                        for edge in self.spatial_graph.adjacency_list.get(nid, []):
+                            neighbor = edge.target
+                            if neighbor in visited:
+                                continue
+                            if limit_sector and neighbor not in sector_nodes:
+                                continue
+                            visited.add(neighbor)
+                            q.append((neighbor, depth + 1))
+                    return [nid for nid in out if not self.spatial_graph.is_reservoir(nid)]
 
-                nearby_connected = [nid for nid in nearby_connected if not self.spatial_graph.is_reservoir(nid)]
+                nearby_connected = _bfs(True)
+                if len(nearby_connected) < 2:
+                    nearby_connected = _bfs(False)
 
-                if len(nearby_connected) < 3:
+                if len(nearby_connected) < 2:
                     self.write_scada_log("No hay suficientes nodos conectados cercanos al reservorio seleccionado.")
                     return
                 nearby_connected.sort(key=lambda nid: math.hypot(self.spatial_graph.nodes[nid].x - cx, self.spatial_graph.nodes[nid].y - cy))
