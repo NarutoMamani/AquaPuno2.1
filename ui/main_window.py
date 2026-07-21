@@ -324,6 +324,10 @@ class MainWindow(ctk.CTk):
                 self.map_widget.highlight_close_valves(self.spatial_graph, self.valves_to_close)
             if self.current_mst:
                 self.map_widget.highlight_mst(self.spatial_graph, self.current_mst)
+            try:
+                self.map_widget.canvas.draw()
+            except Exception:
+                pass
 
     def on_node_selected(self, node_id: str, node, sensor_data):
         """Mostrar información del nodo seleccionado o limpiar si node_id es None"""

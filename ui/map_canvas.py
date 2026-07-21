@@ -69,7 +69,7 @@ class MapCanvasWidget(ctk.CTkFrame):
         x_range = xlim[1] - xlim[0]
         y_range = ylim[1] - ylim[0]
         avg_range = (x_range + y_range) / 2
-        dynamic_threshold = avg_range * 0.005
+        dynamic_threshold = max(avg_range * 0.005, 0.0001)
         
         if closest_node_id and distance < dynamic_threshold:
             self.selected_node_id = closest_node_id
@@ -88,18 +88,21 @@ class MapCanvasWidget(ctk.CTkFrame):
         if not self.graph or not self.graph.nodes:
             return None, float('inf')
         
-        if hasattr(self.graph, 'spatial_index') and self.graph.spatial_index is not None:
-            candidates = self.graph.spatial_index.query_candidates(click_x, click_y, radius=0.005)
-            if candidates:
-                closest_node_id = None
-                min_distance = float('inf')
-                for node_id in candidates:
-                    node = self.graph.nodes[node_id]
-                    distance = math.sqrt((node.x - click_x)**2 + (node.y - click_y)**2)
-                    if distance < min_distance:
-                        min_distance = distance
-                        closest_node_id = node_id
-                return closest_node_id, min_distance
+        try:
+            if hasattr(self.graph, 'spatial_index') and self.graph.spatial_index is not None:
+                candidates = self.graph.spatial_index.query_candidates(click_x, click_y, radius=0.005)
+                if candidates:
+                    closest_node_id = None
+                    min_distance = float('inf')
+                    for node_id in candidates:
+                        node = self.graph.nodes[node_id]
+                        distance = math.sqrt((node.x - click_x)**2 + (node.y - click_y)**2)
+                        if distance < min_distance:
+                            min_distance = distance
+                            closest_node_id = node_id
+                    return closest_node_id, min_distance
+        except Exception:
+            pass
         
         closest_node_id = None
         min_distance = float('inf')
@@ -130,6 +133,13 @@ class MapCanvasWidget(ctk.CTkFrame):
         if not self.selected_node_id or not self.graph:
             return
         
+        if self.highlight_scatter is not None:
+            try:
+                self.highlight_scatter.remove()
+            except Exception:
+                pass
+            self.highlight_scatter = None
+        
         node = self.graph.nodes[self.selected_node_id]
         self.highlight_scatter = self.ax.scatter([node.x], [node.y], color="#00FF00", s=80, 
                        marker="o", edgecolors="white", linewidths=2.5, zorder=10)
@@ -137,15 +147,17 @@ class MapCanvasWidget(ctk.CTkFrame):
 
     def draw_base_network(self, graph: GeoGraph, pressure_data=None):
         current_graph_id = id(graph)
-        
-        if self._base_drawn_graph_id != current_graph_id:
+        needs_redraw = self._base_drawn_graph_id != current_graph_id
+
+        self.clear_dynamic_layers()
+
+        if needs_redraw:
             current_xlim = self.ax.get_xlim()
             current_ylim = self.ax.get_ylim()
             has_limits = not (current_xlim == (0, 1) and current_ylim == (0, 1))
             
             self.graph = graph
             self.sensor_data = pressure_data
-            
             self.ax.clear()
             self.highlight_scatter = None
             self._base_nodes_scatter = None
@@ -203,6 +215,12 @@ class MapCanvasWidget(ctk.CTkFrame):
             
             self._base_drawn_graph_id = current_graph_id
         else:
+            if self.highlight_scatter is not None:
+                try:
+                    self.highlight_scatter.remove()
+                except Exception:
+                    pass
+                self.highlight_scatter = None
             self.graph = graph
             self.sensor_data = pressure_data
         
