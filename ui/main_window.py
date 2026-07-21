@@ -38,7 +38,8 @@ class MainWindow(ctk.CTk):
         self.nominatim_client = NominatimClient()
 
         self.title("AquaPuno SCADA Control Room - v5.0")
-        self.geometry("1200x700")
+        self.geometry("1100x650")
+        self.minsize(900, 550)
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("blue")
 
@@ -55,78 +56,78 @@ class MainWindow(ctk.CTk):
         self.grid_columnconfigure(1, weight=4)
         self.grid_rowconfigure(0, weight=1)
 
-        self.sidebar = ctk.CTkFrame(self, width=300, corner_radius=0)
+        self.sidebar = ctk.CTkScrollableFrame(self, width=320, corner_radius=0)
         self.sidebar.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
 
         self.title_label = ctk.CTkLabel(
             self.sidebar,
             text="AQUAPUNO SMARTWATER",
-            font=ctk.CTkFont(size=18, weight="bold"),
+            font=ctk.CTkFont(size=16, weight="bold"),
             text_color="#00F0FF",
         )
-        self.title_label.pack(pady=(20, 5))
+        self.title_label.pack(pady=(10, 2))
 
         self.subtitle_label = ctk.CTkLabel(
             self.sidebar,
             text="Consola de Instrumentación v5.0",
-            font=ctk.CTkFont(size=11, slant="italic"),
+            font=ctk.CTkFont(size=10, slant="italic"),
             text_color="#888888",
         )
-        self.subtitle_label.pack(pady=(0, 20))
+        self.subtitle_label.pack(pady=(0, 10))
 
         self.frame_path = ctk.CTkFrame(self.sidebar)
-        self.frame_path.pack(fill=ctk.X, padx=10, pady=10)
+        self.frame_path.pack(fill=ctk.X, padx=8, pady=5)
 
         ctk.CTkLabel(
             self.frame_path,
             text="[ Control de Flujo Óptimo ]",
-            font=ctk.CTkFont(size=12, weight="bold"),
+            font=ctk.CTkFont(size=11, weight="bold"),
             text_color="#00F0FF",
-        ).pack(anchor="w", padx=10, pady=5)
+        ).pack(anchor="w", padx=8, pady=3)
 
         self.btn_simulate = ctk.CTkButton(
             self.frame_path,
-            text="Calcular Ruta y Válvulas de Seccionamiento",
+            text="Calcular Ruta y Válvulas",
             command=self.run_pathfinding_simulation,
         )
-        self.btn_simulate.pack(fill=ctk.X, padx=10, pady=10)
+        self.btn_simulate.pack(fill=ctk.X, padx=8, pady=4)
 
         self.btn_backtracking = ctk.CTkButton(
             self.frame_path,
             text="Calcular Rutas Alternativas",
             command=self.run_backtracking_simulation,
         )
-        self.btn_backtracking.pack(fill=ctk.X, padx=10, pady=(0, 10))
+        self.btn_backtracking.pack(fill=ctk.X, padx=8, pady=4)
 
         self.frame_valves = ctk.CTkFrame(self.frame_path)
-        self.frame_valves.pack(fill=ctk.X, padx=10, pady=(0, 10))
+        self.frame_valves.pack(fill=ctk.X, padx=8, pady=4)
 
         ctk.CTkLabel(
             self.frame_valves,
             text="[ Válvulas de Seccionamiento ]",
-            font=ctk.CTkFont(size=11, weight="bold"),
+            font=ctk.CTkFont(size=10, weight="bold"),
             text_color="#FFD700",
-        ).pack(anchor="w", padx=10, pady=(5, 0))
+        ).pack(anchor="w", padx=8, pady=(3, 0))
 
         self.valves_textbox = ctk.CTkTextbox(
             self.frame_valves,
-            height=120,
-            font=ctk.CTkFont(family="monospace", size=10),
+            height=100,
+            font=ctk.CTkFont(family="monospace", size=9),
             fg_color="#050505",
             text_color="#00FF66",
         )
-        self.valves_textbox.pack(fill=ctk.BOTH, expand=True, padx=10, pady=(0, 10))
+        self.valves_textbox.pack(fill=ctk.BOTH, expand=True, padx=8, pady=(0, 5))
         self.valves_textbox.insert(ctk.END, "Ejecute el algoritmo para ver las válvulas recomendadas...")
 
         self.frame_mst = ctk.CTkFrame(self.sidebar)
-        self.frame_mst.pack(fill=ctk.X, padx=10, pady=10)
+        self.frame_mst.pack(fill=ctk.X, padx=8, pady=5)
 
         ctk.CTkLabel(
             self.frame_mst,
             text="[ Gestión Estructural Estática ]",
-            font=ctk.CTkFont(size=12, weight="bold"),
+            font=ctk.CTkFont(size=11, weight="bold"),
             text_color="#00FF66",
-        ).pack(anchor="w", padx=10, pady=5)
+        ).pack(anchor="w", padx=8, pady=3)
 
         self.btn_mst = ctk.CTkButton(
             self.frame_mst,
@@ -135,49 +136,49 @@ class MainWindow(ctk.CTk):
             fg_color="#2E7D32",
             hover_color="#1B5E20",
         )
-        self.btn_mst.pack(fill=ctk.X, padx=10, pady=10)
+        self.btn_mst.pack(fill=ctk.X, padx=8, pady=4)
 
         self.frame_mst_stats = ctk.CTkFrame(self.frame_mst)
-        self.frame_mst_stats.pack(fill=ctk.X, padx=10, pady=(0, 10))
+        self.frame_mst_stats.pack(fill=ctk.X, padx=8, pady=(0, 5))
 
         ctk.CTkLabel(
             self.frame_mst_stats,
             text="[ Estadísticas Troncal ]",
-            font=ctk.CTkFont(size=11, weight="bold"),
+            font=ctk.CTkFont(size=10, weight="bold"),
             text_color="#00E5FF",
-        ).pack(anchor="w", padx=10, pady=(5, 0))
+        ).pack(anchor="w", padx=8, pady=(3, 0))
 
         self.label_mst_edges = ctk.CTkLabel(
             self.frame_mst_stats,
             text="Aristas: --",
-            font=ctk.CTkFont(size=10),
+            font=ctk.CTkFont(size=9),
             text_color="#FFFFFF",
         )
-        self.label_mst_edges.pack(anchor="w", padx=10, pady=2)
+        self.label_mst_edges.pack(anchor="w", padx=8, pady=1)
 
         self.label_mst_length = ctk.CTkLabel(
             self.frame_mst_stats,
             text="Longitud total: --",
-            font=ctk.CTkFont(size=10),
+            font=ctk.CTkFont(size=9),
             text_color="#FFFFFF",
         )
-        self.label_mst_length.pack(anchor="w", padx=10, pady=2)
+        self.label_mst_length.pack(anchor="w", padx=8, pady=1)
 
         self.label_mst_nodes = ctk.CTkLabel(
             self.frame_mst_stats,
             text="Nodos conectados: --",
-            font=ctk.CTkFont(size=10),
+            font=ctk.CTkFont(size=9),
             text_color="#FFFFFF",
         )
-        self.label_mst_nodes.pack(anchor="w", padx=10, pady=2)
+        self.label_mst_nodes.pack(anchor="w", padx=8, pady=1)
 
         self.label_mst_reservoirs = ctk.CTkLabel(
             self.frame_mst_stats,
             text="Reservorios incluidos: --",
-            font=ctk.CTkFont(size=10),
+            font=ctk.CTkFont(size=9),
             text_color="#FFFFFF",
         )
-        self.label_mst_reservoirs.pack(anchor="w", padx=10, pady=(2, 10))
+        self.label_mst_reservoirs.pack(anchor="w", padx=8, pady=(1, 5))
 
         self.btn_leak = ctk.CTkButton(
             self.frame_mst,
@@ -186,7 +187,7 @@ class MainWindow(ctk.CTk):
             fg_color="#B71C1C",
             hover_color="#7F0000",
         )
-        self.btn_leak.pack(fill=ctk.X, padx=10, pady=(0, 10))
+        self.btn_leak.pack(fill=ctk.X, padx=8, pady=4)
 
         self.btn_pdf = ctk.CTkButton(
             self.frame_mst,
@@ -195,44 +196,44 @@ class MainWindow(ctk.CTk):
             fg_color="#A9007F",
             hover_color="#7A005B",
         )
-        self.btn_pdf.pack(fill=ctk.X, padx=10, pady=(0, 10))
+        self.btn_pdf.pack(fill=ctk.X, padx=8, pady=4)
 
         # Marco de información del nodo seleccionado
         self.frame_node_info = ctk.CTkFrame(self.sidebar)
-        self.frame_node_info.pack(fill=ctk.X, padx=10, pady=10)
+        self.frame_node_info.pack(fill=ctk.X, padx=8, pady=5)
 
         ctk.CTkLabel(
             self.frame_node_info,
             text="[ Información del Nodo ]",
-            font=ctk.CTkFont(size=12, weight="bold"),
+            font=ctk.CTkFont(size=11, weight="bold"),
             text_color="#00FFFF",
-        ).pack(anchor="w", padx=10, pady=5)
+        ).pack(anchor="w", padx=8, pady=3)
 
         self.label_node_id = ctk.CTkLabel(
             self.frame_node_info,
             text="ID: --",
-            font=ctk.CTkFont(size=10),
+            font=ctk.CTkFont(size=9),
             text_color="#FFFFFF",
         )
-        self.label_node_id.pack(anchor="w", padx=10, pady=2)
+        self.label_node_id.pack(anchor="w", padx=8, pady=1)
 
         self.label_node_coords = ctk.CTkLabel(
             self.frame_node_info,
             text="Coords: --",
-            font=ctk.CTkFont(size=10),
+            font=ctk.CTkFont(size=9),
             text_color="#FFFFFF",
         )
-        self.label_node_coords.pack(anchor="w", padx=10, pady=2)
+        self.label_node_coords.pack(anchor="w", padx=8, pady=1)
 
         self.label_node_location = ctk.CTkLabel(
             self.frame_node_info,
             text="📍 Ubicación: Cargando...",
-            font=ctk.CTkFont(size=10, weight="bold"),
+            font=ctk.CTkFont(size=9, weight="bold"),
             text_color="#FFD700",
-            wraplength=270,
+            wraplength=280,
             justify="left"
         )
-        self.label_node_location.pack(anchor="w", padx=10, pady=3)
+        self.label_node_location.pack(anchor="w", padx=8, pady=2)
 
         self.label_node_type = ctk.CTkLabel(
             self.frame_node_info,
@@ -269,19 +270,19 @@ class MainWindow(ctk.CTk):
         self.label_node_elevation = ctk.CTkLabel(
             self.frame_node_info,
             text="Elevación: --",
-            font=ctk.CTkFont(size=10),
+            font=ctk.CTkFont(size=9),
             text_color="#FFFFFF",
         )
-        self.label_node_elevation.pack(anchor="w", padx=10, pady=(2, 10))
+        self.label_node_elevation.pack(anchor="w", padx=8, pady=(1, 5))
 
         self.log_textbox = ctk.CTkTextbox(
             self.sidebar,
-            height=150,
-            font=ctk.CTkFont(family="monospace", size=10),
+            height=120,
+            font=ctk.CTkFont(family="monospace", size=9),
             fg_color="#050505",
             text_color="#00FF66",
         )
-        self.log_textbox.pack(fill=ctk.BOTH, expand=True, padx=10, pady=10)
+        self.log_textbox.pack(fill=ctk.BOTH, expand=True, padx=8, pady=5)
         self.write_scada_log("Sistema Listo. Monitoreando malla hídrica de Puno...")
 
         self.canvas_frame = ctk.CTkFrame(self, fg_color="#151515")
