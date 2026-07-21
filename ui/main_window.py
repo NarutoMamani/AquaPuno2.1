@@ -507,148 +507,179 @@ class MainWindow(ctk.CTk):
         self.log_textbox.see(ctk.END)
 
     def run_pathfinding_simulation(self):
-        if not self.spatial_graph:
-            self.write_scada_log("No hay grafo cargado.")
-            return
+        self.write_scada_log("DEBUG: run_pathfinding_simulation INICIO")
+        try:
+            print("[DEBUG] run_pathfinding_simulation INICIO")
+            if not self.spatial_graph:
+                self.write_scada_log("No hay grafo cargado.")
+                return
 
-        reservoir_ids = list(self.spatial_graph.reservoir_nodes)
-        if not reservoir_ids:
-            self.write_scada_log("No hay reservorios definidos.")
-            return
+            reservoir_ids = list(self.spatial_graph.reservoir_nodes)
+            print(f"[DEBUG] reservoir_ids={reservoir_ids}")
+            if not reservoir_ids:
+                self.write_scada_log("No hay reservorios definidos.")
+                return
 
-        self.pathfinding_routes = []
-        self.valves_to_close = []
+            self.pathfinding_routes = []
+            self.valves_to_close = []
 
-        if self.leak_active and self.leak_red_nodes:
-            reservoir_id = self.leak_response_routes[0][0] if self.leak_response_routes else random.choice(reservoir_ids)
-            targets = self.leak_red_nodes[:5]
-            self.write_scada_log("=== CONTROL DE FLUJO AUTOMÁTICO (modo fuga) ===")
-        else:
+            if self.leak_active and self.leak_red_nodes:
+                reservoir_id = self.leak_response_routes[0][0] if self.leak_response_routes else random.choice(reservoir_ids)
+                targets = self.leak_red_nodes[:5]
+                self.write_scada_log("=== CONTROL DE FLUJO AUTOMÁTICO (modo fuga) ===")
+            else:
+                reservoir_id = random.choice(reservoir_ids)
+                sector_nodes = self.spatial_graph.get_sector_nodes(reservoir_id)
+                sector_candidates = [nid for nid in sector_nodes if nid != reservoir_id]
+                if not sector_candidates:
+                    self.write_scada_log("No hay nodos de demanda en el sector del reservorio.")
+                    return
+                random.shuffle(sector_candidates)
+                targets = sector_candidates[:3]
+                self.write_scada_log("=== CONTROL DE FLUJO AUTOMÁTICO ===")
+
+            print(f"[DEBUG] reservoir_id={reservoir_id}, targets={targets}")
+
+            self.valves_textbox.delete("0.0", "end")
+            self.valves_textbox.insert(ctk.END, f"Origen: {reservoir_id}\n")
+            self.valves_textbox.insert(ctk.END, "="*40 + "\n")
+
+            self.valves_to_close = []
+
+            for idx, target in enumerate(targets, 1):
+                print(f"[DEBUG] Calculando ruta {idx} -> {target}")
+                path_d, _ = PathfindingEngine.dijkstra(self.spatial_graph, reservoir_id, target)
+                path_a, _ = PathfindingEngine.a_star(self.spatial_graph, reservoir_id, target)
+                print(f"[DEBUG] dijkstra={len(path_d) if path_d else 0} nodos, a_star={len(path_a) if path_a else 0} nodos")
+                chosen = path_d if path_d else path_a
+                print(f"[DEBUG] chosen={len(chosen) if chosen else 0} nodos")
+                if chosen:
+                    self.pathfinding_routes.append(chosen)
+                    self.valves_textbox.insert(ctk.END, f"Ruta {idx} -> {target}\n")
+                    self.valves_textbox.insert(ctk.END, f"  Nodos: {len(chosen)}\n")
+                    for i, nid in enumerate(chosen):
+                        state = "ABRIR" if i < len(chosen) - 1 else "DESTINO"
+                        self.valves_textbox.insert(ctk.END, f"  [{state}] Válvula {nid}\n")
+                    self.valves_textbox.insert(ctk.END, "\n")
+                    self.write_scada_log(f"Ruta {idx} -> {target}: {len(chosen)} nodos")
+
+                    path_set = set(chosen)
+                    close_valves = []
+                    for nid in chosen:
+                        if nid == reservoir_id or nid == target:
+                            continue
+                        for edge in self.spatial_graph.adjacency_list.get(nid, []):
+                            neighbor = edge.target
+                            if neighbor not in path_set:
+                                close_valves.append(neighbor)
+                    close_valves = list(set(close_valves))
+                    self.valves_to_close.extend(close_valves)
+
+                    if close_valves:
+                        self.valves_textbox.insert(ctk.END, f"  Válvulas a CERRAR en ruta {idx}:\n")
+                        for cid in close_valves:
+                            self.valves_textbox.insert(ctk.END, f"    [CERRAR] Válvula {cid}\n")
+                        self.valves_textbox.insert(ctk.END, "\n")
+                else:
+                    self.write_scada_log(f"Ruta {idx} -> {target}: NO ALCANZABLE")
+
+            self.valves_textbox.insert(ctk.END, "="*40 + "\n")
+            self.valves_textbox.insert(ctk.END, "RECOMENDACIÓN SCADA:\n")
+            self.valves_textbox.insert(ctk.END, "- Abrir válvulas de la ruta principal al 100%\n")
+            self.valves_textbox.insert(ctk.END, "- Cerrar válvulas laterales para evitar pérdidas\n")
+            self.valves_textbox.insert(ctk.END, "- Monitorear presión en nodos intermedios\n")
+
+            print("[DEBUG] Refrescando mapa...")
+            self._refresh_map_view()
+            print("[DEBUG] run_pathfinding_simulation FIN")
+        except Exception as e:
+            print(f"[DEBUG] ERROR run_pathfinding_simulation: {e}")
+            self.write_scada_log(f"ERROR en cálculo de ruta: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def run_backtracking_simulation(self):
+        self.write_scada_log("DEBUG: run_backtracking_simulation INICIO")
+        try:
+            print("[DEBUG] run_backtracking_simulation INICIO")
+            if not self.spatial_graph:
+                self.write_scada_log("No hay grafo cargado.")
+                return
+
+            reservoir_ids = list(self.spatial_graph.reservoir_nodes)
+            print(f"[DEBUG] reservoir_ids={reservoir_ids}")
+            if not reservoir_ids:
+                self.write_scada_log("No hay reservorios definidos.")
+                return
+
             reservoir_id = random.choice(reservoir_ids)
             sector_nodes = self.spatial_graph.get_sector_nodes(reservoir_id)
-            sector_candidates = [nid for nid in sector_nodes if nid != reservoir_id]
+            sector_candidates = [nid for nid in sector_nodes if nid != reservoir_id and not self.spatial_graph.is_reservoir(nid)]
             if not sector_candidates:
                 self.write_scada_log("No hay nodos de demanda en el sector del reservorio.")
                 return
+
+            print(f"[DEBUG] reservoir_id={reservoir_id}, sector_candidates={len(sector_candidates)}")
+
             random.shuffle(sector_candidates)
-            targets = sector_candidates[:3]
-            self.write_scada_log("=== CONTROL DE FLUJO AUTOMÁTICO ===")
+            targets = sector_candidates[:2]
 
-        self.valves_textbox.delete("0.0", "end")
-        self.valves_textbox.insert(ctk.END, f"Origen: {reservoir_id}\n")
-        self.valves_textbox.insert(ctk.END, "="*40 + "\n")
+            self.valves_textbox.delete("0.0", "end")
+            self.valves_textbox.insert(ctk.END, f"Origen: {reservoir_id}\n")
+            self.valves_textbox.insert(ctk.END, "="*40 + "\n")
+            self.valves_textbox.insert(ctk.END, "Backtracking - Rutas Alternativas\n")
+            self.valves_textbox.insert(ctk.END, "="*40 + "\n")
 
-        self.valves_to_close = []
+            self.backtracking_routes = []
+            self.valves_to_close = []
 
-        for idx, target in enumerate(targets, 1):
-            path_d, _ = PathfindingEngine.dijkstra(self.spatial_graph, reservoir_id, target)
-            path_a, _ = PathfindingEngine.a_star(self.spatial_graph, reservoir_id, target)
-            chosen = path_d if path_d else path_a
-            if chosen:
-                self.pathfinding_routes.append(chosen)
-                self.valves_textbox.insert(ctk.END, f"Ruta {idx} -> {target}\n")
-                self.valves_textbox.insert(ctk.END, f"  Nodos: {len(chosen)}\n")
-                for i, nid in enumerate(chosen):
-                    state = "ABRIR" if i < len(chosen) - 1 else "DESTINO"
-                    self.valves_textbox.insert(ctk.END, f"  [{state}] Válvula {nid}\n")
+            for idx, target in enumerate(targets, 1):
+                print(f"[DEBUG] Backtracking destino {idx}: {target}")
+                paths, tel = BacktrackingEngine.find_alternative_routes(
+                    self.spatial_graph, reservoir_id, target, max_paths=3, max_depth=7
+                )
+                print(f"[DEBUG] Backtracking rutas={len(paths)}, visitados={tel.nodes_visited_count}")
+                self.write_scada_log(f"Backtracking -> {target}: {len(paths)} rutas, {tel.nodes_visited_count} nodos visitados")
+                self.valves_textbox.insert(ctk.END, f"Destino {idx}: {target}\n")
+                self.valves_textbox.insert(ctk.END, f"  Rutas encontradas: {len(paths)}\n")
+
+                for p_idx, path in enumerate(paths, 1):
+                    self.backtracking_routes.append(path)
+                    self.valves_textbox.insert(ctk.END, f"  Ruta {p_idx}: {' -> '.join(path)} ({len(path)} nodos)\n")
+
+                    path_set = set(path)
+                    close_valves = []
+                    for nid in path:
+                        if nid == reservoir_id or nid == target:
+                            continue
+                        for edge in self.spatial_graph.adjacency_list.get(nid, []):
+                            neighbor = edge.target
+                            if neighbor not in path_set:
+                                close_valves.append(neighbor)
+                    close_valves = list(set(close_valves))
+                    self.valves_to_close.extend(close_valves)
+
+                    if close_valves:
+                        self.valves_textbox.insert(ctk.END, f"    Válvulas a CERRAR:\n")
+                        for cid in close_valves:
+                            self.valves_textbox.insert(ctk.END, f"      [CERRAR] Válvula {cid}\n")
+
                 self.valves_textbox.insert(ctk.END, "\n")
-                self.write_scada_log(f"Ruta {idx} -> {target}: {len(chosen)} nodos")
 
-                path_set = set(chosen)
-                close_valves = []
-                for nid in chosen:
-                    if nid == reservoir_id or nid == target:
-                        continue
-                    for edge in self.spatial_graph.adjacency_list.get(nid, []):
-                        neighbor = edge.target
-                        if neighbor not in path_set:
-                            close_valves.append(neighbor)
-                close_valves = list(set(close_valves))
-                self.valves_to_close.extend(close_valves)
+            self.valves_textbox.insert(ctk.END, "="*40 + "\n")
+            self.valves_textbox.insert(ctk.END, "RECOMENDACIÓN SCADA:\n")
+            self.valves_textbox.insert(ctk.END, "- Usar estas rutas como alternativas redundantes\n")
+            self.valves_textbox.insert(ctk.END, "- Cerrar válvulas laterales para evitar derrames\n")
+            self.valves_textbox.insert(ctk.END, "- Monitorear presión en nodos intermedios\n")
 
-                if close_valves:
-                    self.valves_textbox.insert(ctk.END, f"  Válvulas a CERRAR en ruta {idx}:\n")
-                    for cid in close_valves:
-                        self.valves_textbox.insert(ctk.END, f"    [CERRAR] Válvula {cid}\n")
-                    self.valves_textbox.insert(ctk.END, "\n")
-            else:
-                self.write_scada_log(f"Ruta {idx} -> {target}: NO ALCANZABLE")
-
-        self.valves_textbox.insert(ctk.END, "="*40 + "\n")
-        self.valves_textbox.insert(ctk.END, "RECOMENDACIÓN SCADA:\n")
-        self.valves_textbox.insert(ctk.END, "- Abrir válvulas de la ruta principal al 100%\n")
-        self.valves_textbox.insert(ctk.END, "- Cerrar válvulas laterales para evitar pérdidas\n")
-        self.valves_textbox.insert(ctk.END, "- Monitorear presión en nodos intermedios\n")
-
-        self._refresh_map_view()
-
-    def run_backtracking_simulation(self):
-        if not self.spatial_graph:
-            self.write_scada_log("No hay grafo cargado.")
-            return
-
-        reservoir_ids = list(self.spatial_graph.reservoir_nodes)
-        if not reservoir_ids:
-            self.write_scada_log("No hay reservorios definidos.")
-            return
-
-        reservoir_id = random.choice(reservoir_ids)
-        sector_nodes = self.spatial_graph.get_sector_nodes(reservoir_id)
-        sector_candidates = [nid for nid in sector_nodes if nid != reservoir_id and not self.spatial_graph.is_reservoir(nid)]
-        if not sector_candidates:
-            self.write_scada_log("No hay nodos de demanda en el sector del reservorio.")
-            return
-
-        random.shuffle(sector_candidates)
-        targets = sector_candidates[:2]
-
-        self.valves_textbox.delete("0.0", "end")
-        self.valves_textbox.insert(ctk.END, f"Origen: {reservoir_id}\n")
-        self.valves_textbox.insert(ctk.END, "="*40 + "\n")
-        self.valves_textbox.insert(ctk.END, "Backtracking - Rutas Alternativas\n")
-        self.valves_textbox.insert(ctk.END, "="*40 + "\n")
-
-        self.backtracking_routes = []
-        self.valves_to_close = []
-
-        for idx, target in enumerate(targets, 1):
-            paths, tel = BacktrackingEngine.find_alternative_routes(
-                self.spatial_graph, reservoir_id, target, max_paths=3, max_depth=7
-            )
-            self.write_scada_log(f"Backtracking -> {target}: {len(paths)} rutas, {tel.nodes_visited_count} nodos visitados")
-            self.valves_textbox.insert(ctk.END, f"Destino {idx}: {target}\n")
-            self.valves_textbox.insert(ctk.END, f"  Rutas encontradas: {len(paths)}\n")
-
-            for p_idx, path in enumerate(paths, 1):
-                self.backtracking_routes.append(path)
-                self.valves_textbox.insert(ctk.END, f"  Ruta {p_idx}: {' -> '.join(path)} ({len(path)} nodos)\n")
-
-                path_set = set(path)
-                close_valves = []
-                for nid in path:
-                    if nid == reservoir_id or nid == target:
-                        continue
-                    for edge in self.spatial_graph.adjacency_list.get(nid, []):
-                        neighbor = edge.target
-                        if neighbor not in path_set:
-                            close_valves.append(neighbor)
-                close_valves = list(set(close_valves))
-                self.valves_to_close.extend(close_valves)
-
-                if close_valves:
-                    self.valves_textbox.insert(ctk.END, f"    Válvulas a CERRAR:\n")
-                    for cid in close_valves:
-                        self.valves_textbox.insert(ctk.END, f"      [CERRAR] Válvula {cid}\n")
-
-            self.valves_textbox.insert(ctk.END, "\n")
-
-        self.valves_textbox.insert(ctk.END, "="*40 + "\n")
-        self.valves_textbox.insert(ctk.END, "RECOMENDACIÓN SCADA:\n")
-        self.valves_textbox.insert(ctk.END, "- Usar estas rutas como alternativas redundantes\n")
-        self.valves_textbox.insert(ctk.END, "- Cerrar válvulas laterales para evitar derrames\n")
-        self.valves_textbox.insert(ctk.END, "- Monitorear presión en nodos intermedios\n")
-
-        self._refresh_map_view()
+            print("[DEBUG] Refrescando mapa...")
+            self._refresh_map_view()
+            print("[DEBUG] run_backtracking_simulation FIN")
+        except Exception as e:
+            print(f"[DEBUG] ERROR run_backtracking_simulation: {e}")
+            self.write_scada_log(f"ERROR en backtracking: {e}")
+            import traceback
+            traceback.print_exc()
 
     def _build_strategic_subgraph(self, graph):
         strategic_ids = set(graph.reservoir_nodes)
@@ -747,138 +778,91 @@ class MainWindow(ctk.CTk):
             self._run_mst_logic()
 
     def toggle_leak_simulation(self):
-        if not self.spatial_graph:
-            self.write_scada_log("No hay grafo cargado.")
-            return
-
-        if self.leak_active:
-            self.leak_active = False
-            self.leak_red_nodes = []
-            self.leak_orange_nodes = []
-            self.leak_response_routes = []
-            self.leak_reroute = []
-            self.valves_to_close = []
-            self.btn_leak.configure(text="Simular Fuga", fg_color="#B71C1C", hover_color="#7F0000")
-            if self.map_widget:
-                self._refresh_map_view()
-            self.write_scada_log("Simulación de fuga DESACTIVADA. Vista normal.")
-        else:
-            node_ids = list(self.spatial_graph.nodes.keys())
-            if len(node_ids) < 5:
-                self.write_scada_log("No hay suficientes nodos para simular fuga.")
+        self.write_scada_log("DEBUG: toggle_leak_simulation INICIO")
+        try:
+            print("[DEBUG] toggle_leak_simulation INICIO")
+            if not self.spatial_graph:
+                self.write_scada_log("No hay grafo cargado.")
                 return
 
-            xs = [self.spatial_graph.nodes[nid].x for nid in node_ids]
-            ys = [self.spatial_graph.nodes[nid].y for nid in node_ids]
-            min_x, max_x = min(xs), max(xs)
-            min_y, max_y = min(ys), max(ys)
-            range_x = max_x - min_x
-            range_y = max_y - min_y
-            max_range = max(range_x, range_y)
+            if self.leak_active:
+                print("[DEBUG] Desactivando fuga")
+                self.leak_active = False
+                self.leak_red_nodes = []
+                self.leak_orange_nodes = []
+                self.leak_response_routes = []
+                self.leak_reroute = []
+                self.valves_to_close = []
+                self.btn_leak.configure(text="Simular Ruptura", fg_color="#B71C1C", hover_color="#7F0000")
+                if self.map_widget:
+                    self._refresh_map_view()
+                self.write_scada_log("Simulación de ruptura DESACTIVADA. Vista normal.")
+            else:
+                node_ids = list(self.spatial_graph.nodes.keys())
+                if len(node_ids) < 5:
+                    self.write_scada_log("No hay suficientes nodos para simular ruptura.")
+                    return
 
-            reservoir_ids = list(self.spatial_graph.reservoir_nodes)
-            if not reservoir_ids:
-                self.write_scada_log("No hay reservorios definidos en el grafo.")
-                return
+                reservoir_ids = list(self.spatial_graph.reservoir_nodes)
+                if not reservoir_ids:
+                    self.write_scada_log("No hay reservorios definidos en el grafo.")
+                    return
 
-            reservoir_id = random.choice(reservoir_ids)
-            reservoir_node = self.spatial_graph.nodes[reservoir_id]
-            cx, cy = reservoir_node.x, reservoir_node.y
+                reservoir_id = random.choice(reservoir_ids)
+                reservoir_node = self.spatial_graph.nodes[reservoir_id]
+                cx, cy = reservoir_node.x, reservoir_node.y
+                sector_map = getattr(self.spatial_graph, 'sector_map', {})
+                sector_nodes = {nid for nid, rid in sector_map.items() if rid == reservoir_id}
 
-            radius = max_range * 0.35
-            self._leak_cx = cx
-            self._leak_cy = cy
-            self._leak_radius = radius
-            queue = __import__('collections').deque([(reservoir_id, 0)])
-            visited = {reservoir_id}
-            nearby_connected = []
-            depth_map = {}
-
-            while queue:
-                nid, depth = queue.popleft()
-                if depth > 0:
-                    dx = self.spatial_graph.nodes[nid].x - cx
-                    dy = self.spatial_graph.nodes[nid].y - cy
-                    if math.hypot(dx, dy) <= radius:
-                        nearby_connected.append(nid)
-                        depth_map[nid] = depth
-                if depth >= 5:
-                    continue
-                for edge in self.spatial_graph.adjacency_list.get(nid, []):
-                    neighbor = edge.target
-                    if neighbor not in visited:
+                xs = [self.spatial_graph.nodes[nid].x for nid in node_ids]
+                ys = [self.spatial_graph.nodes[nid].y for nid in node_ids]
+                min_x, max_x = min(xs), max(xs)
+                min_y, max_y = min(ys), max(ys)
+                range_x = max_x - min_x
+                range_y = max_y - min_y
+                max_range = max(range_x, range_y)
+                radius = max_range * 0.35
+                queue = __import__('collections').deque([(reservoir_id, 0)])
+                visited = {reservoir_id}
+                nearby_connected = []
+                while queue:
+                    nid, depth = queue.popleft()
+                    if depth > 0:
+                        if math.hypot(self.spatial_graph.nodes[nid].x - cx, self.spatial_graph.nodes[nid].y - cy) <= radius:
+                            nearby_connected.append(nid)
+                    if depth >= 5:
+                        continue
+                    for edge in self.spatial_graph.adjacency_list.get(nid, []):
+                        neighbor = edge.target
+                        if neighbor in visited or (sector_nodes and neighbor not in sector_nodes):
+                            continue
                         visited.add(neighbor)
                         queue.append((neighbor, depth + 1))
 
-            nearby_connected = [nid for nid in nearby_connected if not self.spatial_graph.is_reservoir(nid)]
+                nearby_connected = [nid for nid in nearby_connected if not self.spatial_graph.is_reservoir(nid)]
 
-            if len(nearby_connected) < 3:
-                self.write_scada_log("No hay suficientes nodos conectados cercanos al reservorio seleccionado.")
-                return
+                if len(nearby_connected) < 3:
+                    self.write_scada_log("No hay suficientes nodos conectados cercanos al reservorio seleccionado.")
+                    return
+                nearby_connected.sort(key=lambda nid: math.hypot(self.spatial_graph.nodes[nid].x - cx, self.spatial_graph.nodes[nid].y - cy))
+                close_nodes = nearby_connected[:len(nearby_connected)//2]
+                far_nodes = nearby_connected[len(nearby_connected)//2:]
+                self.leak_orange_nodes = close_nodes[:max(4, len(close_nodes)//2)]
+                self.leak_red_nodes = far_nodes[:max(3, len(far_nodes)//2)]
+                self.leak_active = True
+                self.btn_leak.configure(text="Desactivar Ruptura", fg_color="#FF9800", hover_color="#E65100")
+                self.write_scada_log("=== SIMULACIÓN DE RUPTURA ACTIVADA ===")
+                self.write_scada_log(f"Reservorio asociado: {reservoir_id}")
+                self.write_scada_log(f"Nodos en ruptura crítica (ROJO): {len(self.leak_red_nodes)}")
+                self.write_scada_log(f"Nodos en ruptura media (NARANJA): {len(self.leak_orange_nodes)}")
+                self._refresh_map_view()
 
-            nearby_with_dist = []
-            for nid in nearby_connected:
-                dx = self.spatial_graph.nodes[nid].x - cx
-                dy = self.spatial_graph.nodes[nid].y - cy
-                nearby_with_dist.append((math.hypot(dx, dy), nid))
-            nearby_with_dist.sort()
-
-            close_nodes = [nid for _, nid in nearby_with_dist[:len(nearby_with_dist)//2]]
-            far_nodes = [nid for _, nid in nearby_with_dist[len(nearby_with_dist)//2:]]
-
-            n_orange = max(4, len(close_nodes) // 2)
-            n_red = max(3, len(far_nodes) // 2)
-            self.leak_orange_nodes = close_nodes[:n_orange]
-            self.leak_red_nodes = far_nodes[:n_red]
-            self.leak_active = True
-            self.btn_leak.configure(text="Desactivar Fuga", fg_color="#FF9800", hover_color="#E65100")
-            self.write_scada_log("=== SIMULACIÓN DE FUGA ACTIVADA ===")
-            self.write_scada_log(f"Reservorio asociado: {reservoir_id}")
-            self.write_scada_log(f"Nodos en fuga crítica (ROJO): {len(self.leak_red_nodes)}")
-            self.write_scada_log(f"Nodos en fuga media (NARANJA): {len(self.leak_orange_nodes)}")
-
-            for nid in self.leak_red_nodes:
-                self.sensor_data[nid] = {
-                    "presion": round(random.uniform(2.0, 6.0), 2),
-                    "caudal": round(random.uniform(1.0, 5.0), 2),
-                    "estado": "critica"
-                }
-            for nid in self.leak_orange_nodes:
-                self.sensor_data[nid] = {
-                    "presion": round(random.uniform(8.0, 14.0), 2),
-                    "caudal": round(random.uniform(6.0, 11.0), 2),
-                    "estado": "media"
-                }
-
-            self.leak_response_routes = []
-            self.leak_reroute = []
-
-            original_critical = list(self.spatial_graph.critical_nodes)
-            self.spatial_graph.critical_nodes = list(set(original_critical + self.leak_red_nodes + self.leak_orange_nodes))
-
-            try:
-                safe_nodes = [nid for nid in list(self.spatial_graph.nodes.keys())
-                              if nid not in self.leak_red_nodes and nid not in self.leak_orange_nodes
-                              and not self.spatial_graph.is_reservoir(nid)]
-
-                for target in self.leak_red_nodes[:10]:
-                    path, _ = PathfindingEngine.dijkstra(self.spatial_graph, reservoir_id, target)
-                    if path:
-                        self.leak_response_routes.append(path)
-                        self.write_scada_log(f"Ruta intervención -> {target}: {len(path)} nodos")
-
-                if safe_nodes:
-                    random.shuffle(safe_nodes)
-                    reroute_targets = safe_nodes[:min(8, len(safe_nodes))]
-                    for target in reroute_targets:
-                        path, _ = PathfindingEngine.dijkstra(self.spatial_graph, reservoir_id, target)
-                        if path:
-                            self.leak_reroute.append(path)
-                            self.write_scada_log(f"Ruta alternativa -> {target}: {len(path)} nodos")
-            finally:
-                self.spatial_graph.critical_nodes = original_critical
-
-        self._refresh_map_view()
+            print("[DEBUG] toggle_leak_simulation FIN")
+        except Exception as e:
+            print(f"[DEBUG] ERROR toggle_leak_simulation: {e}")
+            self.write_scada_log(f"ERROR en simulación de ruptura: {e}")
+            import traceback
+            traceback.print_exc()
 
     def export_scada_pdf_report(self):
         try:
