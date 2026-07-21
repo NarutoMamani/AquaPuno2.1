@@ -50,20 +50,20 @@ def start_scada_application():
                 if best_nid is not None:
                     reservoir_ids.append(best_nid)
 
-    spatial_graph.set_reservoirs(reservoir_ids)
-    logger.info(f"✓ Se asignaron {len(reservoir_ids)} reservorios estratégicos en cuadrícula {cols}x{rows}")
-    print(f"[MAIN] Nodos tras set_reservoirs: {len(spatial_graph.nodes)}")
-    
-    spatial_graph.assign_sectors()
-    print(f"[MAIN] Nodos tras assign_sectors: {len(spatial_graph.nodes)}")
-    print(f"[MAIN] Sectores creados: {len(spatial_graph.sector_graphs)}")
-    
-    spatial_graph.isolate_sectors()
-    print(f"[MAIN] Nodos tras isolate_sectors: {len(spatial_graph.nodes)}")
-    print(f"[MAIN] Aristas totales post-aislamiento: {sum(len(v) for v in spatial_graph.adjacency_list.values())}")
-    
-    trunk_graph = spatial_graph.get_trunk_graph()
-    print(f"[MAIN] Trunk nodes={len(trunk_graph.nodes)}, trunk edges={sum(len(v) for v in trunk_graph.adjacency_list.values())}")
+        spatial_graph.set_reservoirs(reservoir_ids)
+        logger.info(f"✓ Se asignaron {len(reservoir_ids)} reservorios estratégicos en cuadrícula {cols}x{rows}")
+        print(f"[MAIN] Nodos tras set_reservoirs: {len(spatial_graph.nodes)}")
+        
+        spatial_graph.assign_sectors()
+        print(f"[MAIN] Nodos tras assign_sectors: {len(spatial_graph.nodes)}")
+        print(f"[MAIN] Sectores creados: {len(spatial_graph.sector_graphs)}")
+        
+        spatial_graph.isolate_sectors()
+        print(f"[MAIN] Nodos tras isolate_sectors: {len(spatial_graph.nodes)}")
+        print(f"[MAIN] Aristas totales post-aislamiento: {sum(len(v) for v in spatial_graph.adjacency_list.values())}")
+        
+        trunk_graph = spatial_graph.get_trunk_graph()
+        print(f"[MAIN] Trunk nodes={len(trunk_graph.nodes)}, trunk edges={sum(len(v) for v in trunk_graph.adjacency_list.values())}")
         
         try:
             import json
