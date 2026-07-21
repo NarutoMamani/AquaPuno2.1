@@ -1,11 +1,12 @@
 # REEMPLAZAR COMPLETAMENTE EL ARCHIVO
-from typing import Dict, Any, Optional, Tuple
+import typing
 import urllib.request
 import urllib.parse
 import urllib.error
 import json
 import random
 import time
+import ssl
 from utils.logger import logger
 
 class OverpassClient:
@@ -20,7 +21,7 @@ class OverpassClient:
         self.retries = retries
         self.retry_delay = 2  # segundos entre reintentos
 
-    def fetch_puno_roads(self, bbox: Tuple[float, float, float, float]) -> Optional[Dict[str, Any]]:
+    def fetch_puno_roads(self, bbox: typing.Tuple[float, float, float, float]) -> typing.Optional[typing.Dict[str, typing.Any]]:
         """
         Descarga las calles transitables del BBOX provisto. Si el servidor remoto falla o
         da Timeout, genera automáticamente una topología de respaldo para no detener la app.
@@ -52,7 +53,11 @@ class OverpassClient:
                 
                 logger.info(f"Intento {attempt + 1}/{self.retries} de conexión a Overpass API...")
                 
-                with urllib.request.urlopen(req, timeout=self.timeout) as response:
+                ctx = ssl.create_default_context()
+                ctx.check_hostname = False
+                ctx.verify_mode = ssl.CERT_NONE
+                
+                with urllib.request.urlopen(req, timeout=self.timeout, context=ctx) as response:
                     if response.status == 200:
                         raw_json = json.loads(response.read().decode('utf-8'))
                         elements_count = len(raw_json.get('elements', []))
@@ -96,8 +101,8 @@ class OverpassClient:
         logger.warning("✗ Todos los intentos de conexión a Overpass fallaron. Activando plan de contingencia local...")
         return self._generate_fallback_data(bbox)
 
-    def _generate_fallback_data(self, bbox: Tuple[float, float, float, float]) -> Dict[str, Any]:
-        """Genera una malla estructural de respaldo que imita calles céntricas de Puno."""
+    def _generate_fallback_data(self, bbox: typing.Tuple[float, float, float, float]) -> typing.Dict[str, typing.Any]:
+        """Genera una malla estructural de respaldo más densa y realista para Puno."""
         min_lat, min_lon, max_lat, max_lon = bbox
         logger.info("Generando matriz topológica local de emergencia para el centro de Puno...")
         
@@ -105,8 +110,8 @@ class OverpassClient:
         node_id_counter = 1000000
         way_id_counter = 5000000
         
-        # Crear una rejilla virtual de 25 nodos (5x5) distribuidos uniformemente en el BBOX
-        grid_size = 5
+        # Crear una rejilla virtual de 8x8 con nodos intermedios
+        grid_size = 8
         grid_nodes = []
         
         lat_step = (max_lat - min_lat) / (grid_size - 1)
@@ -128,30 +133,75 @@ class OverpassClient:
                 })
                 row.append(n_id)
             grid_nodes.append(row)
-            
-        # Unir los nodos para formar calles (Ways) horizontales y verticales
-        names = ["Jr. Lima", "Jr. Deustua", "Jr. Puno", "Jr. Arequipa", "Av. La Torre"]
+        
+        # Agregar nodos intermedios entre filas para mayor densidad
+        for i in range(grid_size - 1):
+            for j in range(grid_size):
+                n_id = node_id_counter
+                node_id_counter += 1
+                lat = min_lat + (i * lat_step) + (lat_step / 2)
+                lon = min_lon + (j * lon_step)
+                elements.append({
+                    "type": "node",
+                    "id": n_id,
+                    "lat": lat,
+                    "lon": lon
+                })
+        
+        # Agregar nodos intermedios entre columnas para mayor densidad
+        for i in range(grid_size):
+            for j in range(grid_size - 1):
+                n_id = node_id_counter
+                node_id_counter += 1
+                lat = min_lat + (i * lat_step)
+                lon = min_lon + (j * lon_step) + (lon_step / 2)
+                elements.append({
+                    "type": "node",
+                    "id": n_id,
+                    "lat": lat,
+                    "lon": lon
+                })
         
         # Vías Horizontales
+        horizontal_names = ["Jr. Lima", "Jr. Deustua", "Jr. Puno", "Jr. Arequipa", "Av. La Torre", "Jr. Tacna", "Jr. Cusco", "Pasaje Sur"]
         for i in range(grid_size):
+            nodes_in_row = []
+            for j in range(grid_size):
+                nodes_in_row.append(grid_nodes[i][j])
             elements.append({
                 "type": "way",
                 "id": way_id_counter,
-                "nodes": grid_nodes[i],
-                "tags": {"name": names[i % len(names)], "highway": "residential"}
+                "nodes": nodes_in_row,
+                "tags": {"name": horizontal_names[i % len(horizontal_names)], "highway": "residential"}
             })
             way_id_counter += 1
-            
+        
         # Vías Verticales
+        vertical_names = ["Av. Litoral", "Jr. Aymara", "Calle Rosas", "Pasaje Central", "Jr. Los Incas", "Calle Misti", "Av. Cirilo", "Pasaje Norte"]
         for j in range(grid_size):
             col_nodes = [grid_nodes[i][j] for i in range(grid_size)]
             elements.append({
                 "type": "way",
                 "id": way_id_counter,
                 "nodes": col_nodes,
-                "tags": {"name": f"Pasaje Longitudinal {j+1}", "highway": "residential"}
+                "tags": {"name": vertical_names[j % len(vertical_names)], "highway": "residential"}
             })
             way_id_counter += 1
-            
+        
+        # Calles diagonales adicionales para mayor conectividad
+        diag_names = ["Diagonal 1", "Diagonal 2", "Diagonal 3"]
+        for idx, name in enumerate(diag_names):
+            diag_nodes = []
+            for i in range(grid_size):
+                j = (i + idx) % grid_size
+                diag_nodes.append(grid_nodes[i][j])
+            elements.append({
+                "type": "way",
+                "id": way_id_counter,
+                "nodes": diag_nodes,
+                "tags": {"name": name, "highway": "residential"}
+            })
+            way_id_counter += 1
+        
         logger.info(f"Mapeo de Contingencia completado: {len(elements)} elementos inyectados en memoria.")
         return {"elements": elements}
