@@ -406,25 +406,35 @@ class MainWindow(ctk.CTk):
     def _run_leak_for_sector(self, reservoir_id):
         reservoir_node = self.spatial_graph.nodes[reservoir_id]
         cx, cy = reservoir_node.x, reservoir_node.y
-        sector_nodes = self._get_sector_reservoir_nodes(reservoir_id)
 
-        q = __import__('collections').deque([(reservoir_id, 0)])
-        visited = {reservoir_id}
-        nearby_connected = []
-        while q:
-            nid, depth = q.popleft()
-            if depth > 0:
-                nearby_connected.append(nid)
-            if depth >= 8:
-                continue
-            for edge in self.spatial_graph.adjacency_list.get(nid, []):
-                neighbor = edge.target
-                if neighbor in visited or neighbor not in sector_nodes:
+        sector_graph = getattr(self.spatial_graph, 'sector_graphs', {}).get(reservoir_id)
+        if sector_graph:
+            nearby_connected = [nid for nid in sector_graph.nodes.keys() if not self.spatial_graph.is_reservoir(nid)]
+        else:
+            nearby_connected = []
+            sector_map = getattr(self.spatial_graph, 'sector_map', {})
+            sector_nodes = {nid for nid, rid in sector_map.items() if rid == reservoir_id}
+            if reservoir_id in self.spatial_graph.nodes:
+                sector_nodes.add(reservoir_id)
+            q = __import__('collections').deque([(reservoir_id, 0)])
+            visited = {reservoir_id}
+            while q:
+                nid, depth = q.popleft()
+                if depth > 0:
+                    nearby_connected.append(nid)
+                if depth >= 8:
                     continue
-                visited.add(neighbor)
-                q.append((neighbor, depth + 1))
+                for edge in self.spatial_graph.adjacency_list.get(nid, []):
+                    neighbor = edge.target
+                    if neighbor in visited or neighbor not in sector_nodes:
+                        continue
+                    visited.add(neighbor)
+                    q.append((neighbor, depth + 1))
+            nearby_connected = [nid for nid in nearby_connected if not self.spatial_graph.is_reservoir(nid)]
 
-        nearby_connected = [nid for nid in nearby_connected if not self.spatial_graph.is_reservoir(nid)]
+        if not nearby_connected:
+            node_ids = [nid for nid in self.spatial_graph.nodes.keys() if not self.spatial_graph.is_reservoir(nid)]
+            nearby_connected = node_ids[:max(1, len(node_ids)//4)]
 
         if not nearby_connected:
             self.write_scada_log("Ese sector no tiene nodos disponibles para simular ruptura.")
