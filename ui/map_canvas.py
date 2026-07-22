@@ -351,27 +351,37 @@ class MapCanvasWidget(ctk.CTkFrame):
         self._leak_artists.append(scatter)
         self.canvas.draw_idle()
 
-    def highlight_leak_nodes(self, graph: GeoGraph, red_nodes: list, orange_nodes: list):
+    def highlight_leak_nodes(self, graph: GeoGraph, red_nodes: list, orange_nodes: list, green_nodes: list = None):
         self._clear_artists(self._leak_artists)
         
-        if not red_nodes and not orange_nodes:
+        green_nodes = green_nodes or []
+        all_colored = red_nodes + orange_nodes + green_nodes
+        if not all_colored:
             self.canvas.draw_idle()
             return
 
-        if red_nodes:
-            red_lons = [graph.nodes[nid].x for nid in red_nodes if nid in graph.nodes]
-            red_lats = [graph.nodes[nid].y for nid in red_nodes if nid in graph.nodes]
-            if red_lons:
-                scatter = self.ax.scatter(red_lons, red_lats, color="#FF0000", s=80, marker="o",
-                                edgecolors="white", linewidths=2.5, zorder=8, label="Fuga Crítica")
+        if green_nodes:
+            green_lons = [graph.nodes[nid].x for nid in green_nodes if nid in graph.nodes]
+            green_lats = [graph.nodes[nid].y for nid in green_nodes if nid in graph.nodes]
+            if green_lons:
+                scatter = self.ax.scatter(green_lons, green_lats, color="#00FF00", s=45, marker="o",
+                                edgecolors="white", linewidths=1.2, zorder=7, label="Presión Normal")
                 self._leak_artists.append(scatter)
 
         if orange_nodes:
             orange_lons = [graph.nodes[nid].x for nid in orange_nodes if nid in graph.nodes]
             orange_lats = [graph.nodes[nid].y for nid in orange_nodes if nid in graph.nodes]
             if orange_lons:
-                scatter = self.ax.scatter(orange_lons, orange_lats, color="#FF9800", s=65, marker="o",
-                                edgecolors="white", linewidths=2.0, zorder=8, label="Fuga Media")
+                scatter = self.ax.scatter(orange_lons, orange_lats, color="#FF9800", s=60, marker="o",
+                                edgecolors="white", linewidths=2.0, zorder=8, label="Presión Media")
+                self._leak_artists.append(scatter)
+
+        if red_nodes:
+            red_lons = [graph.nodes[nid].x for nid in red_nodes if nid in graph.nodes]
+            red_lats = [graph.nodes[nid].y for nid in red_nodes if nid in graph.nodes]
+            if red_lons:
+                scatter = self.ax.scatter(red_lons, red_lats, color="#FF0000", s=80, marker="o",
+                                edgecolors="white", linewidths=2.5, zorder=9, label="Presión Crítica")
                 self._leak_artists.append(scatter)
 
         self.canvas.draw_idle()
