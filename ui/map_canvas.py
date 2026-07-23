@@ -401,15 +401,15 @@ class MapCanvasWidget(ctk.CTkFrame):
                 continue
             valve_lons.append(node.x)
             valve_lats.append(node.y)
-            x_lons.append(node.x + 0.0005)
-            x_lats.append(node.y + 0.0005)
+            x_lons.append(node.x + 0.0015)
+            x_lats.append(node.y + 0.0015)
 
         if valve_lons:
             scatter = self.ax.scatter(
                 valve_lons,
                 valve_lats,
                 color="#FFD700",
-                s=50,
+                s=80,
                 marker="o",
             )
             self._leak_artists.append(scatter)
@@ -419,11 +419,11 @@ class MapCanvasWidget(ctk.CTkFrame):
                 x_lons,
                 x_lats,
                 color="#FF0000",
-                s=60,
+                s=220,
                 marker="X",
                 edgecolors="white",
-                linewidths=2.0,
-                zorder=8,
+                linewidths=4.0,
+                zorder=12,
                 label="Válvulas a Cerrar",
             )
             self._leak_artists.append(x_scatter)
