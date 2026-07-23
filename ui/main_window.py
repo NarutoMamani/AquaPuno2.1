@@ -87,19 +87,14 @@ class MainWindow(ctk.CTk):
             text_color="#00F0FF",
         ).pack(anchor="w", padx=8, pady=3)
 
-        self.btn_simulate = ctk.CTkButton(
+        self.btn_close_valves = ctk.CTkButton(
             self.frame_path,
-            text="Calcular Ruta y Válvulas",
-            command=self.run_pathfinding_simulation,
+            text="Cerrar Válvulas",
+            command=self.run_valve_shutdown,
+            fg_color="#BF360C",
+            hover_color="#8A1A00",
         )
-        self.btn_simulate.pack(fill=ctk.X, padx=8, pady=4)
-
-        self.btn_backtracking = ctk.CTkButton(
-            self.frame_path,
-            text="Calcular Rutas Alternativas",
-            command=self.run_backtracking_simulation,
-        )
-        self.btn_backtracking.pack(fill=ctk.X, padx=8, pady=4)
+        self.btn_close_valves.pack(fill=ctk.X, padx=8, pady=4)
 
         self.frame_valves = ctk.CTkFrame(self.frame_path)
         self.frame_valves.pack(fill=ctk.X, padx=8, pady=4)
@@ -571,6 +566,108 @@ class MainWindow(ctk.CTk):
         self.log_textbox.insert(ctk.END, f"> {text}\n")
         self.log_textbox.see(ctk.END)
 
+    def run_valve_shutdown(self):
+        if not self.spatial_graph:
+            self.write_scada_log("No hay grafo cargado.")
+            return
+
+        self.valves_textbox.delete("0.0", "end")
+        self.valves_textbox.insert(ctk.END, "=== CIERRE DE VÁLVULAS PARA EVITAR DERRAMES ===\n")
+        self.valves_textbox.insert(ctk.END, "="*40 + "\n")
+
+        leak_red = list(getattr(self, 'leak_red_nodes', []) or [])
+        leak_orange = list(getattr(self, 'leak_orange_nodes', []) or [])
+        critical_nodes = list(getattr(self, 'critical_nodes', []) or [])
+        pressure_issue = list(dict.fromkeys(leak_red + leak_orange + critical_nodes))
+
+        if not pressure_issue:
+            self.write_scada_log("No hay nodos en presión baja/crítica para seccionar.")
+            self.valves_textbox.insert(ctk.END, "No se detectaron zonas con presión de riesgo.\n")
+            return
+
+        close_valves = []
+        reviewed = set()
+        for nid in pressure_issue:
+            for edge in self.spatial_graph.adjacency_list.get(nid, []):
+                neighbor = edge.target
+                if neighbor in pressure_issue:
+                    continue
+                key = tuple(sorted([nid, neighbor]))
+                if key in reviewed:
+                    continue
+                reviewed.add(key)
+                close_valves.append({
+                    "valve_id": neighbor,
+                    "from_node": nid,
+                    "to_node": neighbor,
+                    "reason": f"Nodo en riesgo {nid} -> conectado con nodo sano {neighbor}"
+                })
+
+        self.valves_textbox.insert(ctk.END, f"Nodos en riesgo detectados: {len(pressure_issue)}\n")
+        self.valves_textbox.insert(ctk.END, f"Válvulas a cerrar: {len(close_valves)}\n\n")
+
+        for idx, valve in enumerate(close_valves, 1):
+            self.valves_textbox.insert(ctk.END, f"[X] Válvula {valve['valve_id']}\n")
+            self.valves_textbox.insert(ctk.END, f"  Tramo: {valve['from_node']} -> {valve['to_node']}\n")
+            self.valves_textbox.insert(ctk.END, f"  Motivo: {valve['reason']}\n\n")
+
+        self.valves_textbox.insert(ctk.END, "="*40 + "\n")
+        self.valves_textbox.insert(ctk.END, "RECOMENDACIÓN SCADA:\n")
+        self.valves_textbox.insert(ctk.END, "- Cerrar las válvulas listadas para aislar la zona en riesgo\n")
+        self.valves_textbox.insert(ctk.END, "- Monitorear presión aguas abajo después del cierre\n")
+        self.valves_textbox.insert(ctk.END, "- Si la presión no recupera, abrir válvulas de respaldo\n")
+
+    def run_valve_shutdown(self):
+        if not self.spatial_graph:
+            self.write_scada_log("No hay grafo cargado.")
+            return
+
+        self.valves_textbox.delete("0.0", "end")
+        self.valves_textbox.insert(ctk.END, "=== CIERRE DE VÁLVULAS PARA EVITAR DERRAMES ===\n")
+        self.valves_textbox.insert(ctk.END, "="*40 + "\n")
+
+        leak_red = list(getattr(self, 'leak_red_nodes', []) or [])
+        leak_orange = list(getattr(self, 'leak_orange_nodes', []) or [])
+        critical_nodes = list(getattr(self, 'critical_nodes', []) or [])
+        pressure_issue = list(dict.fromkeys(leak_red + leak_orange + critical_nodes))
+
+        if not pressure_issue:
+            self.write_scada_log("No hay nodos en presión baja/crítica para seccionar.")
+            self.valves_textbox.insert(ctk.END, "No se detectaron zonas con presión de riesgo.\n")
+            return
+
+        close_valves = []
+        reviewed = set()
+        for nid in pressure_issue:
+            for edge in self.spatial_graph.adjacency_list.get(nid, []):
+                neighbor = edge.target
+                if neighbor in pressure_issue:
+                    continue
+                key = tuple(sorted([nid, neighbor]))
+                if key in reviewed:
+                    continue
+                reviewed.add(key)
+                close_valves.append({
+                    "valve_id": neighbor,
+                    "from_node": nid,
+                    "to_node": neighbor,
+                    "reason": f"Nodo en riesgo {nid} -> conectado con nodo sano {neighbor}"
+                })
+
+        self.valves_textbox.insert(ctk.END, f"Nodos en riesgo detectados: {len(pressure_issue)}\n")
+        self.valves_textbox.insert(ctk.END, f"Válvulas a cerrar: {len(close_valves)}\n\n")
+
+        for idx, valve in enumerate(close_valves, 1):
+            self.valves_textbox.insert(ctk.END, f"[X] Válvula {valve['valve_id']}\n")
+            self.valves_textbox.insert(ctk.END, f"  Tramo: {valve['from_node']} -> {valve['to_node']}\n")
+            self.valves_textbox.insert(ctk.END, f"  Motivo: {valve['reason']}\n\n")
+
+        self.valves_textbox.insert(ctk.END, "="*40 + "\n")
+        self.valves_textbox.insert(ctk.END, "RECOMENDACIÓN SCADA:\n")
+        self.valves_textbox.insert(ctk.END, "- Cerrar las válvulas listadas para aislar la zona en riesgo\n")
+        self.valves_textbox.insert(ctk.END, "- Monitorear presión aguas abajo después del cierre\n")
+        self.valves_textbox.insert(ctk.END, "- Si la presión no recupera, abrir válvulas de respaldo\n")
+
     def run_pathfinding_simulation(self):
         self.write_scada_log("DEBUG: run_pathfinding_simulation INICIO")
         try:
@@ -660,6 +757,89 @@ class MainWindow(ctk.CTk):
         except Exception as e:
             print(f"[DEBUG] ERROR run_pathfinding_simulation: {e}")
             self.write_scada_log(f"ERROR en cálculo de ruta: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def run_backtracking_simulation(self):
+        self.write_scada_log("DEBUG: run_backtracking_simulation INICIO")
+        try:
+            print("[DEBUG] run_backtracking_simulation INICIO")
+            if not self.spatial_graph:
+                self.write_scada_log("No hay grafo cargado.")
+                return
+
+            reservoir_ids = list(self.spatial_graph.reservoir_nodes)
+            print(f"[DEBUG] reservoir_ids={reservoir_ids}")
+            if not reservoir_ids:
+                self.write_scada_log("No hay reservorios definidos.")
+                return
+
+            reservoir_id = random.choice(reservoir_ids)
+            sector_nodes = self.spatial_graph.get_sector_nodes(reservoir_id)
+            sector_candidates = [nid for nid in sector_nodes if nid != reservoir_id and not self.spatial_graph.is_reservoir(nid)]
+            if not sector_candidates:
+                self.write_scada_log("No hay nodos de demanda en el sector del reservorio.")
+                return
+
+            print(f"[DEBUG] reservoir_id={reservoir_id}, sector_candidates={len(sector_candidates)}")
+
+            random.shuffle(sector_candidates)
+            targets = sector_candidates[:2]
+
+            self.valves_textbox.delete("0.0", "end")
+            self.valves_textbox.insert(ctk.END, f"Origen: {reservoir_id}\n")
+            self.valves_textbox.insert(ctk.END, "="*40 + "\n")
+            self.valves_textbox.insert(ctk.END, "Backtracking - Rutas Alternativas\n")
+            self.valves_textbox.insert(ctk.END, "="*40 + "\n")
+
+            self.backtracking_routes = []
+            self.valves_to_close = []
+
+            for idx, target in enumerate(targets, 1):
+                print(f"[DEBUG] Backtracking destino {idx}: {target}")
+                paths, tel = BacktrackingEngine.find_alternative_routes(
+                    self.spatial_graph, reservoir_id, target, max_paths=3, max_depth=7
+                )
+                print(f"[DEBUG] Backtracking rutas={len(paths)}, visitados={tel.nodes_visited_count}")
+                self.write_scada_log(f"Backtracking -> {target}: {len(paths)} rutas, {tel.nodes_visited_count} nodos visitados")
+                self.valves_textbox.insert(ctk.END, f"Destino {idx}: {target}\n")
+                self.valves_textbox.insert(ctk.END, f"  Rutas encontradas: {len(paths)}\n")
+
+                for p_idx, path in enumerate(paths, 1):
+                    self.backtracking_routes.append(path)
+                    self.valves_textbox.insert(ctk.END, f"  Ruta {p_idx}: {' -> '.join(path)} ({len(path)} nodos)\n")
+
+                    path_set = set(path)
+                    close_valves = []
+                    for nid in path:
+                        if nid == reservoir_id or nid == target:
+                            continue
+                        for edge in self.spatial_graph.adjacency_list.get(nid, []):
+                            neighbor = edge.target
+                            if neighbor not in path_set:
+                                close_valves.append(neighbor)
+                    close_valves = list(set(close_valves))
+                    self.valves_to_close.extend(close_valves)
+
+                    if close_valves:
+                        self.valves_textbox.insert(ctk.END, f"    Válvulas a CERRAR:\n")
+                        for cid in close_valves:
+                            self.valves_textbox.insert(ctk.END, f"      [CERRAR] Válvula {cid}\n")
+
+                self.valves_textbox.insert(ctk.END, "\n")
+
+            self.valves_textbox.insert(ctk.END, "="*40 + "\n")
+            self.valves_textbox.insert(ctk.END, "RECOMENDACIÓN SCADA:\n")
+            self.valves_textbox.insert(ctk.END, "- Usar estas rutas como alternativas redundantes\n")
+            self.valves_textbox.insert(ctk.END, "- Cerrar válvulas laterales para evitar derrames\n")
+            self.valves_textbox.insert(ctk.END, "- Monitorear presión en nodos intermedios\n")
+
+            print("[DEBUG] Refrescando mapa...")
+            self._refresh_map_view()
+            print("[DEBUG] run_backtracking_simulation FIN")
+        except Exception as e:
+            print(f"[DEBUG] ERROR run_backtracking_simulation: {e}")
+            self.write_scada_log(f"ERROR en backtracking: {e}")
             import traceback
             traceback.print_exc()
 
