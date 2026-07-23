@@ -391,21 +391,42 @@ class MapCanvasWidget(ctk.CTkFrame):
             self.canvas.draw_idle()
             return
 
-        lons = [graph.nodes[nid].x for nid in close_valve_ids if nid in graph.nodes]
-        lats = [graph.nodes[nid].y for nid in close_valve_ids if nid in graph.nodes]
-        if lons:
+        valve_lons = []
+        valve_lats = []
+        x_lons = []
+        x_lats = []
+        for nid in close_valve_ids:
+            node = graph.nodes.get(nid)
+            if not node:
+                continue
+            valve_lons.append(node.x)
+            valve_lats.append(node.y)
+            x_lons.append(node.x + 0.0005)
+            x_lats.append(node.y + 0.0005)
+
+        if valve_lons:
             scatter = self.ax.scatter(
-                lons,
-                lats,
+                valve_lons,
+                valve_lats,
                 color="#FFD700",
-                s=55,
-                marker="X",
-                edgecolors="white",
-                linewidths=1.5,
-                zorder=7,
-                label="Válvulas a Cerrar",
+                s=50,
+                marker="o",
             )
             self._leak_artists.append(scatter)
+
+        if x_lons:
+            x_scatter = self.ax.scatter(
+                x_lons,
+                x_lats,
+                color="#FF0000",
+                s=60,
+                marker="X",
+                edgecolors="white",
+                linewidths=2.0,
+                zorder=8,
+                label="Válvulas a Cerrar",
+            )
+            self._leak_artists.append(x_scatter)
 
         self.canvas.draw_idle()
 
