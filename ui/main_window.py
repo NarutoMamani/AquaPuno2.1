@@ -416,6 +416,7 @@ class MainWindow(ctk.CTk):
         if not sector_node_ids:
             self.write_scada_log("Ese sector no tiene nodos disponibles para simular ruptura.")
             self.leak_active = False
+            self.leak_reservoir_id = None
             self.leak_red_nodes = []
             self.leak_orange_nodes = []
             self.leak_response_routes = []
@@ -445,6 +446,7 @@ class MainWindow(ctk.CTk):
                 self.sensor_data[nid] = {"presion": round(random.uniform(20.0, 45.0), 2), "caudal": round(random.uniform(12.0, 20.0), 2), "estado": "normal"}
 
         self.leak_active = True
+        self.leak_reservoir_id = reservoir_id
         self.btn_leak.configure(text="Desactivar Ruptura", fg_color="#FF9800", hover_color="#E65100")
         self.write_scada_log("=== SIMULACIÓN DE RUPTURA ACTIVADA ===")
         self.write_scada_log(f"Reservorio asociado: {reservoir_id}")
@@ -580,56 +582,13 @@ class MainWindow(ctk.CTk):
         critical_nodes = list(getattr(self, 'critical_nodes', []) or [])
         pressure_issue = list(dict.fromkeys(leak_red + leak_orange + critical_nodes))
 
-        if not pressure_issue:
-            self.write_scada_log("No hay nodos en presión baja/crítica para seccionar.")
-            self.valves_textbox.insert(ctk.END, "No se detectaron zonas con presión de riesgo.\n")
-            return
-
-        close_valves = []
-        reviewed = set()
-        for nid in pressure_issue:
-            for edge in self.spatial_graph.adjacency_list.get(nid, []):
-                neighbor = edge.target
-                if neighbor in pressure_issue:
-                    continue
-                key = tuple(sorted([nid, neighbor]))
-                if key in reviewed:
-                    continue
-                reviewed.add(key)
-                close_valves.append({
-                    "valve_id": neighbor,
-                    "from_node": nid,
-                    "to_node": neighbor,
-                    "reason": f"Nodo en riesgo {nid} -> conectado con nodo sano {neighbor}"
-                })
-
-        self.valves_textbox.insert(ctk.END, f"Nodos en riesgo detectados: {len(pressure_issue)}\n")
-        self.valves_textbox.insert(ctk.END, f"Válvulas a cerrar: {len(close_valves)}\n\n")
-
-        for idx, valve in enumerate(close_valves, 1):
-            self.valves_textbox.insert(ctk.END, f"[X] Válvula {valve['valve_id']}\n")
-            self.valves_textbox.insert(ctk.END, f"  Tramo: {valve['from_node']} -> {valve['to_node']}\n")
-            self.valves_textbox.insert(ctk.END, f"  Motivo: {valve['reason']}\n\n")
-
-        self.valves_textbox.insert(ctk.END, "="*40 + "\n")
-        self.valves_textbox.insert(ctk.END, "RECOMENDACIÓN SCADA:\n")
-        self.valves_textbox.insert(ctk.END, "- Cerrar las válvulas listadas para aislar la zona en riesgo\n")
-        self.valves_textbox.insert(ctk.END, "- Monitorear presión aguas abajo después del cierre\n")
-        self.valves_textbox.insert(ctk.END, "- Si la presión no recupera, abrir válvulas de respaldo\n")
-
-    def run_valve_shutdown(self):
-        if not self.spatial_graph:
-            self.write_scada_log("No hay grafo cargado.")
-            return
-
-        self.valves_textbox.delete("0.0", "end")
-        self.valves_textbox.insert(ctk.END, "=== CIERRE DE VÁLVULAS PARA EVITAR DERRAMES ===\n")
-        self.valves_textbox.insert(ctk.END, "="*40 + "\n")
-
-        leak_red = list(getattr(self, 'leak_red_nodes', []) or [])
-        leak_orange = list(getattr(self, 'leak_orange_nodes', []) or [])
-        critical_nodes = list(getattr(self, 'critical_nodes', []) or [])
-        pressure_issue = list(dict.fromkeys(leak_red + leak_orange + critical_nodes))
+        active_reservoir_id = getattr(self, 'leak_reservoir_id', None)
+        if active_reservoir_id and pressure_issue:
+            sector_map = getattr(self.spatial_graph, 'sector_map', {})
+            sector_ids = {nid for nid, rid in sector_map.items() if rid == active_reservoir_id}
+            if active_reservoir_id in self.spatial_graph.nodes:
+                sector_ids.add(active_reservoir_id)
+            pressure_issue = [nid for nid in pressure_issue if nid in sector_ids]
 
         if not pressure_issue:
             self.write_scada_log("No hay nodos en presión baja/crítica para seccionar.")
@@ -667,7 +626,6 @@ class MainWindow(ctk.CTk):
         self.valves_textbox.insert(ctk.END, "- Cerrar las válvulas listadas para aislar la zona en riesgo\n")
         self.valves_textbox.insert(ctk.END, "- Monitorear presión aguas abajo después del cierre\n")
         self.valves_textbox.insert(ctk.END, "- Si la presión no recupera, abrir válvulas de respaldo\n")
-
 
         self.valves_to_close = [v["valve_id"] for v in close_valves]
         self.write_scada_log(f"Válvulas recomendadas para cerrar: {len(close_valves)}")
@@ -1030,6 +988,7 @@ class MainWindow(ctk.CTk):
     def toggle_leak_simulation(self):
         if self.leak_active:
             self.leak_active = False
+            self.leak_reservoir_id = None
             self.leak_red_nodes = []
             self.leak_orange_nodes = []
             self.leak_response_routes = []
