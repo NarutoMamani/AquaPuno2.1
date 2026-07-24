@@ -51,6 +51,7 @@ class MapCanvasWidget(ctk.CTkFrame):
         self._mst_scatter = None
         self._path_collections = []
         self._leak_artists = []
+        self._valve_artists = []
         self._sector_artists = []
 
     def set_node_selection_callback(self, callback):
@@ -387,6 +388,7 @@ class MapCanvasWidget(ctk.CTkFrame):
         self.canvas.draw_idle()
 
     def highlight_close_valves(self, graph: GeoGraph, close_valve_ids: list):
+        self._clear_artists(self._valve_artists)
         if not close_valve_ids:
             self.canvas.draw_idle()
             return
@@ -401,10 +403,11 @@ class MapCanvasWidget(ctk.CTkFrame):
             x_lats.append(node.y)
 
         if x_lons:
+            print(f"[MAP] Dibujando {len(x_lons)} X de válvulas")
             x_scatter = self.ax.scatter(
                 x_lons,
                 x_lats,
-                color="#FF0000",
+                color="#FF00FF",
                 s=260,
                 marker="X",
                 edgecolors="white",
@@ -412,7 +415,7 @@ class MapCanvasWidget(ctk.CTkFrame):
                 zorder=15,
                 label="Válvulas a Cerrar",
             )
-            self._leak_artists.append(x_scatter)
+            self._valve_artists.append(x_scatter)
 
         self.canvas.draw_idle()
 
@@ -499,6 +502,7 @@ class MapCanvasWidget(ctk.CTkFrame):
             self._mst_scatter = None
         self._clear_artists(self._path_collections)
         self._clear_artists(self._leak_artists)
+        self._clear_artists(self._valve_artists)
         self._clear_artists(self._sector_artists)
 
     def _draw_sectors(self, graph: GeoGraph):

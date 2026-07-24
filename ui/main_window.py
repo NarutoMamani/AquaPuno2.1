@@ -611,12 +611,15 @@ class MainWindow(ctk.CTk):
         else:
             sector_ids = set(self.spatial_graph.nodes.keys())
 
+        affected_set = set(pressure_issue)
+        boundary_edges = []
+
         for nid in pressure_issue:
             if nid not in self.spatial_graph.adjacency_list:
                 continue
             for edge in self.spatial_graph.adjacency_list[nid]:
                 neighbor = edge.target
-                if neighbor in pressure_issue:
+                if neighbor in affected_set:
                     continue
                 if neighbor not in sector_ids:
                     continue
@@ -624,11 +627,45 @@ class MainWindow(ctk.CTk):
                 if key in reviewed:
                     continue
                 reviewed.add(key)
+                boundary_edges.append((nid, neighbor))
+
+        if boundary_edges:
+            healthy_to_affected = {}
+            for aid, hid in boundary_edges:
+                healthy_to_affected.setdefault(hid, set()).add(aid)
+
+            mst_node_ids = set()
+            for u, v, _ in getattr(self, 'current_mst', []) or []:
+                mst_node_ids.add(u)
+                mst_node_ids.add(v)
+
+            trunk_valves = []
+            other_valves = []
+            for hid, acc in healthy_to_affected.items():
+                entry = (len(acc), hid)
+                if hid in mst_node_ids:
+                    trunk_valves.append(entry)
+                else:
+                    other_valves.append(entry)
+
+            trunk_valves.sort(key=lambda x: x[0], reverse=True)
+            other_valves.sort(key=lambda x: x[0], reverse=True)
+
+            for _, hid in trunk_valves[:4]:
                 close_valves.append({
-                    "valve_id": neighbor,
-                    "from_node": nid,
-                    "to_node": neighbor,
-                    "reason": f"Frontera del sector: {nid} -> {neighbor}"
+                    "valve_id": hid,
+                    "from_node": hid,
+                    "to_node": hid,
+                    "reason": "Puerta de aislamiento en red troncal"
+                })
+
+            remaining = 8 - len(close_valves)
+            for _, hid in other_valves[:remaining]:
+                close_valves.append({
+                    "valve_id": hid,
+                    "from_node": hid,
+                    "to_node": hid,
+                    "reason": "Puerta de aislamiento estratégica"
                 })
 
         if not close_valves:
@@ -649,6 +686,10 @@ class MainWindow(ctk.CTk):
                         "to_node": neighbor,
                         "reason": f"Nodo estratégico para cierre: {nid} -> {neighbor}"
                     })
+                    if len(close_valves) >= 8:
+                        break
+                if len(close_valves) >= 8:
+                    break
 
         self.valves_textbox.insert(ctk.END, f"Nodos en riesgo detectados: {len(pressure_issue)}\n")
         self.valves_textbox.insert(ctk.END, f"Válvulas a cerrar: {len(close_valves)}\n\n")
@@ -665,6 +706,7 @@ class MainWindow(ctk.CTk):
         self.valves_textbox.insert(ctk.END, "- Si la presión no recupera, abrir válvulas de respaldo\n")
 
         self.valves_to_close = [v["valve_id"] for v in close_valves]
+        print(f"[VALVE SHUTDOWN] Válvulas estratégicas seleccionadas: {len(close_valves)} -> {self.valves_to_close}")
         self.write_scada_log(f"Válvulas recomendadas para cerrar: {len(close_valves)}")
         self._refresh_map_view()
 
