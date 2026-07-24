@@ -1,4 +1,4 @@
-import os
+﻿import os
 import sys
 import random  # Necesario para simular los sensores
 import threading
@@ -667,6 +667,11 @@ class MainWindow(ctk.CTk):
         self.valves_textbox.insert(ctk.END, "- Cerrar las válvulas listadas para aislar la zona en riesgo\n")
         self.valves_textbox.insert(ctk.END, "- Monitorear presión aguas abajo después del cierre\n")
         self.valves_textbox.insert(ctk.END, "- Si la presión no recupera, abrir válvulas de respaldo\n")
+
+
+        self.valves_to_close = [v["valve_id"] for v in close_valves]
+        self.write_scada_log(f"Válvulas recomendadas para cerrar: {len(close_valves)}")
+        self._refresh_map_view()
 
     def run_pathfinding_simulation(self):
         self.write_scada_log("DEBUG: run_pathfinding_simulation INICIO")
