@@ -602,10 +602,23 @@ class MainWindow(ctk.CTk):
 
         close_valves = []
         reviewed = set()
+        sector_map = getattr(self.spatial_graph, 'sector_map', {})
+        active_reservoir_id = getattr(self, 'leak_reservoir_id', None)
+        if active_reservoir_id:
+            sector_ids = {nid for nid, rid in sector_map.items() if rid == active_reservoir_id}
+            if active_reservoir_id in self.spatial_graph.nodes:
+                sector_ids.add(active_reservoir_id)
+        else:
+            sector_ids = set(self.spatial_graph.nodes.keys())
+
         for nid in pressure_issue:
-            for edge in self.spatial_graph.adjacency_list.get(nid, []):
+            if nid not in self.spatial_graph.adjacency_list:
+                continue
+            for edge in self.spatial_graph.adjacency_list[nid]:
                 neighbor = edge.target
                 if neighbor in pressure_issue:
+                    continue
+                if neighbor not in sector_ids:
                     continue
                 key = tuple(sorted([nid, neighbor]))
                 if key in reviewed:
@@ -615,40 +628,27 @@ class MainWindow(ctk.CTk):
                     "valve_id": neighbor,
                     "from_node": nid,
                     "to_node": neighbor,
-                    "reason": f"Nodo en riesgo {nid} -> conectado con nodo sano {neighbor}"
+                    "reason": f"Frontera del sector: {nid} -> {neighbor}"
                 })
 
         if not close_valves:
-            sector_map = getattr(self.spatial_graph, 'sector_map', {})
-            active_reservoir_id = getattr(self, 'leak_reservoir_id', None)
-            if active_reservoir_id:
-                sector_ids = {nid for nid, rid in sector_map.items() if rid == active_reservoir_id}
-                if active_reservoir_id in self.spatial_graph.nodes:
-                    sector_ids.add(active_reservoir_id)
-            else:
-                sector_ids = set(self.spatial_graph.nodes.keys())
-
-            frontier_valves = []
             for nid in pressure_issue:
                 if nid not in self.spatial_graph.adjacency_list:
                     continue
                 for edge in self.spatial_graph.adjacency_list[nid]:
                     neighbor = edge.target
-                    if neighbor in pressure_issue:
-                        continue
-                    if neighbor not in sector_ids:
+                    if neighbor == nid:
                         continue
                     key = tuple(sorted([nid, neighbor]))
                     if key in reviewed:
                         continue
                     reviewed.add(key)
-                    frontier_valves.append({
+                    close_valves.append({
                         "valve_id": neighbor,
                         "from_node": nid,
                         "to_node": neighbor,
-                        "reason": f"Frontera del sector: {nid} -> {neighbor}"
+                        "reason": f"Nodo estratégico para cierre: {nid} -> {neighbor}"
                     })
-            close_valves = frontier_valves
 
         self.valves_textbox.insert(ctk.END, f"Nodos en riesgo detectados: {len(pressure_issue)}\n")
         self.valves_textbox.insert(ctk.END, f"Válvulas a cerrar: {len(close_valves)}\n\n")
